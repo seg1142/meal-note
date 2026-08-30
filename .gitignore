@@ -1,0 +1,25 @@
+# Local environment / credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Local exports and backup files
+data/
+exports/
+backups/
+recipe-app-sync.json
+meal-note-*.json
+oauth*.json
+client_secret*.json
+credentials*.json
+service-account*.json
+*.db
+*.sqlite
+*.sqlite3
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/

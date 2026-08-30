@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>献立アプリ 画面構成たたき台</title>
+<style>
+  :root{
+    --bg:#0E1013;
+    --surface:#171A1F;
+    --elevated:#20242A;
+    --border:rgba(255,255,255,0.08);
+    --text:#F5F5F5;
+    --text-secondary:#9CA3AF;
+    --accent:#F0A93A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    padding:28px 16px 60px;
+    background:#08090b;
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+    color:var(--text);
+  }
+  .page-header{max-width:960px;margin:0 auto 20px;}
+  .page-header h1{font-size:18px;margin:0 0 4px;}
+  .page-header p{font-size:13px;color:var(--text-secondary);margin:0;line-height:1.6;}
+
+  .control-panel{
+    max-width:960px;margin:0 auto 28px;background:var(--surface);
+    border:1px solid var(--border);border-radius:16px;padding:16px 18px;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .control-row{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;}
+  .control-label{font-size:12px;color:var(--text-secondary);min-width:100px;padding-top:8px;}
+  .control-main{display:flex;flex-direction:column;gap:4px;}
+  .seg{display:inline-flex;background:var(--elevated);border-radius:10px;padding:3px;gap:2px;}
+  .seg button{
+    border:none;background:transparent;color:var(--text-secondary);font-size:13px;
+    padding:7px 14px;border-radius:8px;cursor:pointer;font-family:inherit;
+  }
+  .seg button.active{background:var(--accent);color:#1a1200;font-weight:700;}
+  .control-caption{font-size:11.5px;color:var(--text-secondary);}
+
+  .frame-wrap{max-width:960px;margin:0 auto;display:flex;justify-content:center;}
+  .app-frame{
+    background:var(--bg);border:1px solid var(--border);overflow:hidden;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.7);position:relative;
+  }
+  .app-frame.device-mobile{width:380px;height:730px;border-radius:36px;display:flex;flex-direction:column;}
+  .app-frame.device-desktop{width:900px;height:600px;border-radius:16px;display:flex;flex-direction:row;}
+
+  .notch{display:none;}
+  .device-mobile .notch{
+    display:block;position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    width:90px;height:5px;background:rgba(255,255,255,.15);border-radius:4px;z-index:5;
+  }
+  .device-mobile .app-content{padding-top:22px;}
+
+  .app-nav{background:var(--surface);flex-shrink:0;}
+  .device-mobile .app-nav{
+    order:2;display:flex;flex-direction:row;border-top:1px solid var(--border);
+    padding:8px 4px 16px;
+  }
+  .device-mobile .app-nav .nav-item{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    font-size:10.5px;color:var(--text-secondary);cursor:pointer;padding:4px 0;
+  }
+  .device-mobile .app-nav .nav-item .icon{font-size:19px;line-height:1;}
+  .device-mobile .app-nav .nav-item.active{color:var(--accent);}
+  .device-mobile .logo{display:none;}
+
+  .device-desktop .app-nav{
+    order:0;flex-direction:column;width:172px;border-right:1px solid var(--border);
+    padding:20px 12px;gap:2px;
+  }
+  .device-desktop .logo{font-size:14px;font-weight:700;padding:0 10px 20px;}
+  .device-desktop .app-nav .nav-item{
+    flex-direction:row;justify-content:flex-start;align-items:center;gap:10px;
+    font-size:13.5px;padding:10px 10px;border-radius:10px;color:var(--text-secondary);cursor:pointer;
+  }
+  .device-desktop .app-nav .nav-item.active{background:var(--elevated);color:var(--accent);}
+  .device-desktop .app-nav .nav-item .icon{font-size:16px;width:18px;text-align:center;}
+
+  .app-content{flex:1;display:flex;flex-direction:column;min-height:0;order:1;}
+  .app-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .app-header h2{margin:0 0 10px;font-size:17px;font-weight:700;}
+  .app-body{flex:1;overflow-y:auto;padding:12px 16px 24px;}
+
+  .search-box{
+    display:flex;align-items:center;gap:8px;background:var(--elevated);
+    border-radius:10px;padding:9px 12px;font-size:13px;color:var(--text-secondary);margin-bottom:10px;
+  }
+  .chip-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;}
+  .chip{
+    flex-shrink:0;font-size:12px;padding:6px 12px;border-radius:999px;
+    background:var(--elevated);color:var(--text-secondary);cursor:pointer;white-space:nowrap;
+  }
+  .chip.active{background:var(--accent);color:#1a1200;font-weight:700;}
+
+  .recipe-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+  .device-desktop .recipe-grid{grid-template-columns:repeat(3,1fr);}
+  .recipe-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+  .recipe-card .photo{height:76px;}
+  .recipe-card .body{padding:10px 12px 12px;}
+  .recipe-card .title{font-size:13.5px;font-weight:700;margin-bottom:4px;}
+  .recipe-card .meta{font-size:11px;color:var(--text-secondary);margin-bottom:6px;}
+  .recipe-card .tags{
+    font-size:10.5px;color:var(--text-secondary);margin-bottom:8px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .recipe-card .foot{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-secondary);}
+  .recipe-card .rating{color:var(--accent);font-weight:700;}
+
+  .recipe-list{display:flex;flex-direction:column;}
+  .recipe-row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border);}
+  .recipe-row .swatch{width:30px;height:30px;border-radius:8px;flex-shrink:0;}
+  .recipe-row .main{flex:1;min-width:0;}
+  .recipe-row .r-title{font-size:13px;font-weight:700;display:flex;gap:6px;align-items:baseline;}
+  .recipe-row .r-rating{font-size:10.5px;color:var(--accent);font-weight:400;}
+  .recipe-row .r-meta{font-size:11px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .recipe-row .r-servings{font-size:11px;color:var(--text-secondary);flex-shrink:0;}
+
+  .week-nav{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text-secondary);margin-bottom:8px;}
+  .week-nav .arrow{cursor:pointer;font-size:15px;padding:2px 6px;}
+  .day-block{padding:10px 0;border-bottom:1px solid var(--border);}
+  .day-block.today .day-title{color:var(--accent);}
+  .day-title{font-size:12.5px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;}
+  .day-title .date{font-weight:400;margin-left:4px;}
+  .meal-slot-label{font-size:10.5px;color:var(--text-secondary);margin-bottom:4px;}
+  .meal-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .meal-chip{font-size:12px;background:var(--elevated);padding:6px 10px;border-radius:8px;}
+  .meal-empty{font-size:12px;color:var(--text-secondary);opacity:.5;}
+
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--text-secondary);margin-bottom:8px;}
+  .cal-nav .arrow{cursor:pointer;font-size:15px;padding:2px 6px;}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);font-size:10.5px;color:var(--text-secondary);text-align:center;margin-bottom:4px;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .cal-cell{aspect-ratio:1/1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px;font-size:9.5px;display:flex;flex-direction:column;gap:2px;overflow:hidden;}
+  .cal-cell.empty{background:transparent;border:none;}
+  .cal-cell.today{border:1.5px solid var(--accent);}
+  .cal-cell .num{font-size:10px;color:var(--text-secondary);}
+  .cal-cell.today .num{color:var(--accent);font-weight:700;}
+  .cal-chip{font-size:8px;background:var(--elevated);border-radius:4px;padding:1px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .shop-section{margin-bottom:14px;}
+  .shop-section h4{font-size:11px;color:var(--text-secondary);letter-spacing:.03em;margin:0 0 6px;}
+  .shop-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border);}
+  .shop-item .qty{margin-left:auto;color:var(--text-secondary);font-size:12px;}
+
+  .other-item{display:flex;justify-content:space-between;align-items:center;padding:13px 2px;border-bottom:1px solid var(--border);font-size:13.5px;cursor:pointer;}
+  .other-item .chev{color:var(--text-secondary);}
+</style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>献立アプリ 画面構成たたき台</h1>
+    <p>下のパネルで表示パターンを切り替えて、実際の見た目で比較できます。①タブ構成 ②献立表示 ③レシピ一覧表示 の3点を確認してください。</p>
+  </div>
+
+  <div class="control-panel">
+    <div class="control-row">
+      <div class="control-label">① 端末</div>
+      <div class="control-main">
+        <div class="seg">
+          <button data-device="mobile" onclick="setDevice('mobile')">📱 スマホ（下タブ）</button>
+          <button data-device="desktop" onclick="setDevice('desktop')">🖥 PC（左サイドバー）</button>
+        </div>
+      </div>
+    </div>
+    <div class="control-row">
+      <div class="control-label">③ レシピ一覧</div>
+      <div class="control-main">
+        <div class="seg">
+          <button data-recipeview="card" onclick="setRecipeView('card')">🖼 カード表示</button>
+          <button data-recipeview="list" onclick="setRecipeView('list')">☰ 高密度リスト</button>
+        </div>
+        <div class="control-caption">カード＝写真映え・視覚的に探しやすい／リスト＝1画面に多く表示・比較しやすい</div>
+      </div>
+    </div>
+    <div class="control-row">
+      <div class="control-label">② 献立</div>
+      <div class="control-main">
+        <div class="seg">
+          <button data-mealview="week" onclick="setMealView('week')">📅 週一覧</button>
+          <button data-mealview="calendar" onclick="setMealView('calendar')">🗓 カレンダー</button>
+        </div>
+        <div class="control-caption">週一覧＝献立の中身が見やすい／カレンダー＝月全体の予定を俯瞰できる</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame-wrap">
+    <div class="app-frame device-mobile" id="appFrame">
+      <div class="notch"></div>
+      <nav class="app-nav" id="appNav">
+        <div class="logo">献立アプリ</div>
+        <div class="nav-item" data-tab="recipes" onclick="setTab('recipes')"><span class="icon">🍳</span><span>レシピ</span></div>
+        <div class="nav-item" data-tab="meal" onclick="setTab('meal')"><span class="icon">📅</span><span>献立</span></div>
+        <div class="nav-item" data-tab="shopping" onclick="setTab('shopping')"><span class="icon">🛒</span><span>買い物</span></div>
+        <div class="nav-item" data-tab="other" onclick="setTab('other')"><span class="icon">⋯</span><span>その他</span></div>
+      </nav>
+      <div class="app-content">
+        <div class="app-header" id="appHeader"></div>
+        <div class="app-body" id="appBody"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const RECIPES = [
+  {title:'回鍋肉', category:'主菜', genre:'中華', time:20, servings:2, rating:4.5, lastCooked:'8/31', tags:['豚肉','キャベツ','甜面醤'], color:'#c2542b'},
+  {title:'生姜焼き', category:'主菜', genre:'和食', time:20, servings:2, rating:4.5, lastCooked:'9/6', tags:['豚肉','玉ねぎ','醤油'], color:'#b5651d'},
+  {title:'ロールキャベツ', category:'主菜', genre:'洋食', time:40, servings:2, rating:4.0, lastCooked:'9/2', tags:['キャベツ','ひき肉','コンソメ'], color:'#4d7c5f'},
+  {title:'豚キャベツ焼きそば', category:'主食', genre:'中華', time:15, servings:2, rating:4.2, lastCooked:'9/1', tags:['豚肉','キャベツ','中華麺'], color:'#a8532f'},
+  {title:'鶏むね肉の照り焼き', category:'主菜', genre:'和食', time:20, servings:2, rating:4.3, lastCooked:'9/4', tags:['鶏むね肉','醤油','みりん'], color:'#8a6b2e'},
+  {title:'無限ピーマン', category:'副菜', genre:'和食', time:10, servings:2, rating:4.0, lastCooked:'8/22', tags:['ピーマン','ツナ'], color:'#4f7a3b'},
+  {title:'味玉', category:'副菜', genre:'和食', time:5, servings:4, rating:4.6, lastCooked:'8/15', tags:['卵','めんつゆ'], color:'#c99a2e'},
+  {title:'ひじきの煮物', category:'副菜', genre:'和食', time:25, servings:4, rating:4.1, lastCooked:'8/12', tags:['ひじき','にんじん','油揚げ'], color:'#3d3d3d'},
+];
+const CATEGORIES = ['すべて','主菜','副菜','主食','おつまみ','時短'];
+
+const WEEK = [
+  {label:'月', date:'8/31', today:true, dinner:['回鍋肉']},
+  {label:'火', date:'9/1', dinner:['豚キャベツ焼きそば']},
+  {label:'水', date:'9/2', dinner:['ロールキャベツ','無限ピーマン']},
+  {label:'木', date:'9/3', dinner:[]},
+  {label:'金', date:'9/4', dinner:['鶏むね肉の照り焼き']},
+  {label:'土', date:'9/5', dinner:[]},
+  {label:'日', date:'9/6', dinner:['生姜焼き','味噌汁']},
+];
+
+const MEAL_DOTS = {10:'ロールキャベツ',12:'ひじきの煮物',15:'味玉',18:'照り焼き',20:'生姜焼き',22:'無限ピーマン',25:'焼きそば',31:'回鍋肉'};
+const TODAY_DAY = 31;
+function buildCalendar(){
+  const leading = 6; // Aug 1, 2026 is Saturday
+  const days = 31;
+  const cells = [];
+  for(let i=0;i<leading;i++) cells.push(null);
+  for(let d=1;d<=days;d++) cells.push(d);
+  while(cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+const CAL_CELLS = buildCalendar();
+
+const state = {device:'mobile', tab:'recipes', recipeView:'card', mealView:'week', category:'すべて'};
+
+function setDevice(d){ state.device = d; render(); }
+function setTab(t){ state.tab = t; render(); }
+function setRecipeView(v){ state.recipeView = v; state.tab='recipes'; render(); }
+function setMealView(v){ state.mealView = v; state.tab='meal'; render(); }
+function setCategory(c){ state.category = c; render(); }
+
+function filteredRecipes(){
+  if(state.category==='すべて') return RECIPES;
+  if(state.category==='時短') return RECIPES.filter(r=>r.time<=15);
+  return RECIPES.filter(r=>r.category===state.category);
+}
+
+function renderHeader(){
+  const h = document.getElementById('appHeader');
+  if(state.tab==='recipes'){
+    h.innerHTML = `
+      <h2>レシピ</h2>
+      <div class="search-box">🔍 検索</div>
+      <div class="chip-row">${CATEGORIES.map(c=>`<div class="chip ${c===state.category?'active':''}" onclick="setCategory('${c}')">${c}</div>`).join('')}</div>
+    `;
+  } else if(state.tab==='meal'){
+    if(state.mealView==='week'){
+      h.innerHTML = `<h2>献立</h2><div class="week-nav"><span class="arrow">＜</span><span>8/31 - 9/6</span><span class="arrow">＞</span></div>`;
+    } else {
+      h.innerHTML = `
+        <h2>献立</h2>
+        <div class="cal-nav"><span class="arrow">＜</span><span>2026年8月</span><span class="arrow">＞</span></div>
+        <div class="cal-weekdays"><div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div></div>
+      `;
+    }
+  } else if(state.tab==='shopping'){
+    h.innerHTML = `<h2>買い物</h2>`;
+  } else {
+    h.innerHTML = `<h2>その他</h2>`;
+  }
+}
+
+function renderBody(){
+  const b = document.getElementById('appBody');
+  if(state.tab==='recipes'){
+    const list = filteredRecipes();
+    if(state.recipeView==='card'){
+      b.innerHTML = `<div class="recipe-grid">${list.map(r=>`
+        <div class="recipe-card">
+          <div class="photo" style="background:${r.color}"></div>
+          <div class="body">
+            <div class="title">${r.title}</div>
+            <div class="meta">${r.category}・${r.time}分・👤${r.servings}</div>
+            <div class="tags">${r.tags.join(' / ')}</div>
+            <div class="foot"><span>最終 ${r.lastCooked}</span><span class="rating">★ ${r.rating}</span></div>
+          </div>
+        </div>`).join('')}</div>`;
+    } else {
+      b.innerHTML = `<div class="recipe-list">${list.map(r=>`
+        <div class="recipe-row">
+          <div class="swatch" style="background:${r.color}"></div>
+          <div class="main">
+            <div class="r-title">${r.title}<span class="r-rating">★${r.rating}</span></div>
+            <div class="r-meta">${r.category}・${r.genre}・${r.time}分・${r.tags.join('/')}</div>
+          </div>
+          <div class="r-servings">👤${r.servings}</div>
+        </div>`).join('')}</div>`;
+    }
+  } else if(state.tab==='meal'){
+    if(state.mealView==='week'){
+      b.innerHTML = WEEK.map(d=>`
+        <div class="day-block ${d.today?'today':''}">
+          <div class="day-title">${d.label}<span class="date">${d.date}</span></div>
+          <div class="meal-slot-label">夜</div>
+          ${d.dinner.length ? `<div class="meal-chips">${d.dinner.map(m=>`<div class="meal-chip">${m}</div>`).join('')}</div>` : `<div class="meal-empty">＋ 追加</div>`}
+        </div>`).join('');
+    } else {
+      b.innerHTML = `<div class="cal-grid">${CAL_CELLS.map(d=>{
+        if(d===null) return `<div class="cal-cell empty"></div>`;
+        const meal = MEAL_DOTS[d];
+        const isToday = d===TODAY_DAY;
+        return `<div class="cal-cell ${isToday?'today':''}">
+          <div class="num">${d}</div>
+          ${meal ? `<div class="cal-chip">${meal}</div>` : ''}
+        </div>`;
+      }).join('')}</div>`;
+    }
+  } else if(state.tab==='shopping'){
+    b.innerHTML = `
+      <div class="shop-section"><h4>野菜</h4>
+        <div class="shop-item"><input type="checkbox"> 玉ねぎ <span class="qty">3個</span></div>
+        <div class="shop-item"><input type="checkbox"> キャベツ <span class="qty">1個</span></div>
+        <div class="shop-item"><input type="checkbox" checked> ピーマン <span class="qty">4個</span></div>
+      </div>
+      <div class="shop-section"><h4>肉・魚</h4>
+        <div class="shop-item"><input type="checkbox"> 豚こま肉 <span class="qty">600g</span></div>
+        <div class="shop-item"><input type="checkbox"> 鶏むね肉 <span class="qty">400g</span></div>
+      </div>
+      <div class="shop-section"><h4>調味料</h4>
+        <div class="shop-item"><input type="checkbox" checked> 醤油 <span class="qty">120ml</span></div>
+        <div class="shop-item"><input type="checkbox"> みりん <span class="qty">60ml</span></div>
+      </div>
+    `;
+  } else {
+    b.innerHTML = `
+      <div class="other-item">タグ管理 <span class="chev">›</span></div>
+      <div class="other-item">常備品 <span class="chev">›</span></div>
+      <div class="other-item">食材マスタ <span class="chev">›</span></div>
+      <div class="other-item">設定 <span class="chev">›</span></div>
+      <div class="other-item">インポート履歴 <span class="chev">›</span></div>
+    `;
+  }
+}
+
+function render(){
+  const frame = document.getElementById('appFrame');
+  frame.className = 'app-frame device-' + state.device;
+  document.querySelectorAll('#appNav .nav-item').forEach(item=>{
+    item.classList.toggle('active', item.dataset.tab===state.tab);
+  });
+  document.querySelectorAll('[data-device]').forEach(btn=>btn.classList.toggle('active', btn.dataset.device===state.device));
+  document.querySelectorAll('[data-recipeview]').forEach(btn=>btn.classList.toggle('active', btn.dataset.recipeview===state.recipeView));
+  document.querySelectorAll('[data-mealview]').forEach(btn=>btn.classList.toggle('active', btn.dataset.mealview===state.mealView));
+  renderHeader();
+  renderBody();
+}
+
+render();
+</script>
+</body>
+</html>

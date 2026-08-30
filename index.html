@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#203b6c" />
+    <meta name="description" content="献立・レシピ・買い物・調理をひとつにつなぐ個人用アプリ" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="app-icon-192.png" type="image/png" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app-config.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <title>Meal Note</title>
+  </head>
+  <body>
+    <svg class="icon-defs" aria-hidden="true" focusable="false">
+      <symbol id="icon-recipe" viewBox="0 0 64 64">
+        <rect x="5" y="5" width="54" height="54" rx="12" fill="none" stroke="currentColor" stroke-width="5" />
+        <path d="M16 7v29c0 5 3 8 8 9v14M16 7v13M22 7v13M28 7v13" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M45 8c-5 1-8 9-8 17 0 5 3 9 8 10v24M45 8c7 2 8 14 5 22" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-meal" viewBox="0 0 64 64">
+        <path d="M8 13h48v45H8zM8 24h48" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round" />
+        <path d="M18 7v12M32 7v12M46 7v12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+        <circle cx="19" cy="34" r="3.5" fill="currentColor" /><circle cx="32" cy="34" r="3.5" fill="currentColor" /><circle cx="45" cy="34" r="3.5" fill="currentColor" />
+        <circle cx="19" cy="46" r="3.5" fill="currentColor" /><circle cx="32" cy="46" r="3.5" fill="currentColor" /><circle cx="45" cy="46" r="3.5" fill="currentColor" />
+      </symbol>
+      <symbol id="icon-shopping" viewBox="0 0 64 64">
+        <path d="M10 22h44l-5 31a5 5 0 0 1-5 4H20a5 5 0 0 1-5-4z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round" />
+        <path d="M3 22h58M30 22 51 6c3-2 7 1 5 4L35 22" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M22 33v10M32 33v10M42 33v10M18 33h30M19 46h28" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+      </symbol>
+    </svg>
+    <div id="app" class="app-shell">
+      <aside class="sidebar" aria-label="メインナビゲーション">
+        <a class="brand" href="#/recipes" aria-label="Meal Note ホーム">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span><strong>Meal Note</strong><small>献立を、軽やかに。</small></span>
+        </a>
+        <nav class="primary-nav">
+          <a href="#/recipes" data-nav-route="recipes"><svg class="nav-icon-svg" aria-hidden="true" focusable="false"><use href="#icon-recipe"></use></svg><span>レシピ</span></a>
+          <a href="#/meal-plan" data-nav-route="meal-plan"><svg class="nav-icon-svg" aria-hidden="true" focusable="false"><use href="#icon-meal"></use></svg><span>献立</span></a>
+          <a href="#/shopping" data-nav-route="shopping"><svg class="nav-icon-svg" aria-hidden="true" focusable="false"><use href="#icon-shopping"></use></svg><span>買い物</span><span class="nav-badge" id="shoppingBadge" hidden></span></a>
+        </nav>
+        <div class="nav-divider"></div>
+        <div class="nav-section-label">その他</div>
+        <nav class="secondary-nav">
+          <a href="#/more" data-nav-route="more"><span class="nav-icon" aria-hidden="true">•••</span><span>その他</span></a>
+        </nav>
+        <div class="sidebar-footer">
+          <button class="icon-button" type="button" data-action="toggle-theme" aria-label="テーマを切り替え" title="テーマを切り替え">◐</button>
+          <span id="storageStatus">ローカル保存</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="mobile-brand"><span class="brand-mark" aria-hidden="true">✦</span><strong>Meal Note</strong></div>
+          <div class="topbar-spacer"></div>
+          <button class="icon-button" type="button" data-action="toggle-theme" aria-label="テーマを切り替え" title="テーマを切り替え">◐</button>
+          <a class="button button-primary topbar-add" href="#/recipes/new"><span aria-hidden="true">＋</span> レシピを追加</a>
+        </header>
+        <section id="view" class="view" aria-live="polite"></section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="モバイルナビゲーション">
+        <a href="#/recipes" data-nav-route="recipes"><svg class="nav-icon-svg" aria-hidden="true" focusable="false"><use href="#icon-recipe"></use></svg><span>レシピ</span></a>
+        <a href="#/meal-plan" data-nav-route="meal-plan"><svg class="nav-icon-svg" aria-hidden="true" focusable="false"><use href="#icon-meal"></use></svg><span>献立</span></a>
+        <a href="#/shopping" data-nav-route="shopping"><svg class="nav-icon-svg" aria-hidden="true" focusable="false"><use href="#icon-shopping"></use></svg><span>買い物</span><span class="nav-badge" id="shoppingBadgeMobile" hidden></span></a>
+        <a href="#/more" data-nav-route="more"><span class="nav-icon" aria-hidden="true">•••</span><span>その他</span></a>
+      </nav>
+    </div>
+
+    <dialog id="modal" class="modal" aria-labelledby="modalTitle"></dialog>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
