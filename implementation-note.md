@@ -15,13 +15,13 @@
 
 ## Sync and backup architecture
 
-- `localStorage` remains the primary store. Google Drive is a manually triggered sync snapshot / backup store.
-- Snapshot root is versioned with `schemaVersion`, `syncVersion`, `updatedAt`, and `sourceDeviceId`; application settings are included under `data.settings` with a settings timestamp.
+- `localStorage` remains the primary store. JSON export/import/share is the primary backup and device-transfer flow. Google Drive is an optional, manually triggered sync snapshot / backup store.
+- Snapshot root is versioned with `schemaVersion`, `syncVersion`, `exportedAt`, `updatedAt`, and `sourceDeviceId`; application settings are included under `data.settings` with a settings timestamp.
 - Major records are normalized with `id`, `createdAt`, `updatedAt`, and `deletedAt` tombstones. Merge is record-level last-write-wins, including nested shopping-list items.
-- Data Management provides local JSON export/import/share, a local pre-operation snapshot, and Google Drive Pull → Merge → Validate → Local save → Cloud upload.
+- Data Management prioritizes local JSON export/import/share, keeps a local pre-operation snapshot, and exposes Google Drive Pull → Merge → Validate → Local save → Cloud upload under Advanced Sync.
 - Drive uses the browser OAuth token model and the constrained `drive.file` scope. Tokens are memory-only; no client secret or refresh token is shipped to the static site or stored in localStorage.
 - The Drive layout is `Recipe App/recipe-app-sync.json` and `Recipe App/backups/*.json`; backup retention is user-configurable from 1 to 10 files, with confirmation before old files are deleted.
-- `app-config.js` contains only the public Web OAuth Client ID placeholder. It must be filled for a deployment, while private data JSON and secrets stay outside Git.
+- `app-config.js` contains only the public Web OAuth Client ID placeholder. It remains blank for the current deployment; fill it only if Google Drive sync is re-enabled. Private data JSON and secrets stay outside Git.
 
 ## DB strategy
 
