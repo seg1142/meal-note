@@ -4,6 +4,8 @@
   var STORAGE_KEY = 'meal-app-v1';
   var LOCAL_BACKUP_KEY = 'meal-app-local-backup-v1';
   var SYNC_SCHEMA_VERSION = 1;
+  var SEED_DATA_VERSION = 2;
+  var LEGACY_SEED_IDS = ['recipe-yakibuta', 'recipe-hoikoro', 'recipe-teriyaki', 'recipe-rollcabbage', 'recipe-yakisoba', 'recipe-mugenpepper', 'recipe-ajitama', 'recipe-hijiki', 'recipe-misosoup', 'recipe-potatosalad'];
   var DEFAULT_SETTINGS = { theme: 'dark', recipeView: 'list', shoppingView: 'category', excludePantry: true, backupRetention: 5 };
   var WEEKDAYS = ['月', '火', '水', '木', '金', '土', '日'];
   var SLOTS = [
@@ -184,6 +186,77 @@
     };
   }
 
+  function seedLinkedRecipe(id, title, category, tags, servings, prep, cook, ingredients, steps, color, sourceUrl, description) {
+    var recipe = seedRecipe(id, title, category, tags, servings, prep, cook, ingredients, steps, false, color, description);
+    recipe.sourceType = 'web';
+    recipe.sourceUrl = sourceUrl;
+    return recipe;
+  }
+
+  function createRequestedSeedRecipes() {
+    var I = function (name, quantity, unit, note, optional) { return defaultIngredient(name, quantity, unit, note, optional); };
+    var youtube = 'https://www.youtube.com/watch?v=';
+    return [
+      seedLinkedRecipe('recipe-youtube-yakisoba', '最高傑作焼きそば', '主食', ['中華', 'YouTube'], 1, 10, 15, [
+        I('鰹粉', 2, 'g'), I('粉末ソース', 1, '袋'), I('酒', 1, '大さじ'), I('みりん', 0.5, '大さじ'), I('カレー粉', 0.25, '小さじ'), I('オイスターソース', 2, '小さじ'), I('コショウ', 2, '振り'), I('長ねぎ', 30, 'g'), I('にんにく', 1, '片'), I('ラード', 1, '大さじ'), I('中華麺', 1, '玉'), I('塩こしょう', null, '', '適量'), I('豚バラ肉', 80, 'g'), I('にんじん', 20, 'g'), I('キャベツ', 60, 'g'), I('もやし', 100, 'g'), I('卵', 1, '個'), I('青のり', null, '', '適量', true), I('紅生姜', null, '', '適量', true)
+      ], ['鰹粉・粉末ソース・酒・みりん・カレー粉・オイスターソース・コショウを混ぜてたれを作る。', '長ねぎ・にんにく・ラードを炒め、麺を焼いていったん取り出す。', '豚肉、にんじん、キャベツを炒め、麺・たれ・もやしを戻して炒め合わせる。', '目玉焼きをのせ、青のりと紅生姜を添える。'], PALETTE[0], youtube + 'k20sOp0ZhoE', '料理研究家リュウジのバズレシピ。香味油で作る焼きそばです。'),
+      seedLinkedRecipe('recipe-youtube-rollcabbage', '至高のロールキャベツ', '主菜', ['洋食', 'YouTube'], 2, 15, 25, [
+        I('キャベツ', 4, '枚'), I('合いびき肉', 260, 'g'), I('塩', 0.5, '小さじ'), I('マヨネーズ', 3, '小さじ'), I('玉ねぎ', 60, 'g'), I('にんにく', 3, '片'), I('ナツメグ', 5, '振り'), I('ラード', 2, '小さじ'), I('パン粉', 2, '大さじ'), I('味の素', 6, '振り'), I('黒こしょう', null, '', '適量'), I('バター', 10, 'g'), I('水', 200, 'ml'), I('コンソメ', 1, '小さじ'), I('粒マスタード', null, '', '味変用', true)
+      ], ['キャベツを電子レンジで加熱して柔らかくし、芯を薄く削ぐ。', 'ひき肉、塩、マヨネーズ、玉ねぎ、にんにく、ナツメグ、ラード、パン粉、味の素、こしょうを混ぜる。', '肉だねをキャベツで包む。', 'にんにくとバターを炒め、ロールキャベツ・水・コンソメ・塩を加えて蓋をし、弱火で約20分煮る。'], PALETTE[1], youtube + 'jAgqTeF8me0', '料理研究家リュウジのバズレシピ。動画説明欄の材料を登録しています。'),
+      seedLinkedRecipe('recipe-youtube-omurice', '至高のオムライス', '主食', ['洋食', 'YouTube'], 2, 10, 20, [
+        I('鶏もも肉', 80, 'g'), I('塩こしょう', null, '', '下味用'), I('玉ねぎ', 0.25, '個'), I('コンソメ', 0.5, '小さじ'), I('マッシュルーム', 50, 'g'), I('ケチャップ', 3, '大さじ'), I('ご飯', 200, 'g'), I('バター', 15, 'g'), I('卵', 2, '個'), I('塩', 1, 'つまみ'), I('ウスターソース', 0.5, '小さじ', '仕上げ用'), I('ケチャップ', 1.5, '大さじ', '仕上げ用')
+      ], ['鶏肉、玉ねぎ、マッシュルームを炒め、コンソメとケチャップで味付けする。', 'ご飯を加えて炒め、チキンライスを作る。', '卵を溶いてバターで半熟に焼き、チキンライスにのせる。', '仕上げ用のケチャップとウスターソースをかける。'], PALETTE[2], youtube + 'Au-XRzpEjuA&list=PLckPTDhLTXdYLQUfd3O36rvp_cGTFRu7a', '料理研究家リュウジのバズレシピ。動画説明欄の材料を登録しています。'),
+      seedLinkedRecipe('recipe-youtube-dokonjoryaki', 'ド根性焼き', '主食', ['中華', 'YouTube'], 1, 10, 15, [
+        I('薄力粉', 30, 'g'), I('片栗粉', 1, '小さじ'), I('水', 60, 'ml'), I('白だし', 1, '小さじ'), I('サラダ油', 1, '小さじ'), I('塩こしょう', null, '', '適量'), I('豚バラ肉', 70, 'g'), I('長ねぎ', 60, 'g'), I('天かす', 10, 'g'), I('鰹節', 2, 'g'), I('紅生姜', 5, 'g'), I('卵', 1, '個'), I('ソース', null, '', '適量', true), I('マヨネーズ', null, '', '適量', true), I('青のり', null, '', '適量', true), I('きざみ海苔', null, '', '適量', true)
+      ], ['薄力粉、片栗粉、水、白だしを混ぜて生地を作る。', '豚肉を塩こしょうして焼く。', '生地を流し、長ねぎ・天かす・鰹節・紅生姜・豚肉・卵をのせて両面を焼く。', 'ソース、マヨネーズ、青のり、紅生姜、きざみ海苔を添える。'], PALETTE[3], youtube + 'rQWFFFrzd5k&list=PLckPTDhLTXdYLQUfd3O36rvp_cGTFRu7a&index=5', '料理研究家リュウジのバズレシピ。関西辺りの老舗屋台料理として紹介されているレシピです。'),
+      seedLinkedRecipe('recipe-youtube-harihari-nabe', '至高のはりはり鍋', '主菜', ['和食', '鍋', 'YouTube'], 2, 10, 15, [
+        I('水菜', 200, 'g'), I('油揚げ', 2, '枚'), I('長ねぎ', 60, 'g'), I('豚バラ肉', 250, 'g'), I('水', 400, 'ml'), I('鰹粉', 3, 'g'), I('味の素', 5, '振り'), I('醤油', 2, '小さじ'), I('オイスターソース', 2, '小さじ'), I('塩', 0.5, '小さじ'), I('山椒', null, '', '味変用', true), I('柚子胡椒', null, '', '味変用', true)
+      ], ['水、鰹粉、味の素、醤油、オイスターソース、塩を鍋に入れる。', '水菜、油揚げ、長ねぎ、豚肉を加えて煮る。', '火が通ったら山椒や柚子胡椒を添える。'], PALETTE[4], youtube + 'e59VT-12Ck4&list=PLckPTDhLTXdYLQUfd3O36rvp_cGTFRu7a&index=6', '料理研究家リュウジのバズレシピ。'),
+      seedLinkedRecipe('recipe-youtube-cabbage-nabe', '悪魔のキャベツ鍋', '主菜', ['和食', '鍋', 'YouTube'], 2, 10, 20, [
+        I('キャベツ', 250, 'g'), I('豚バラ肉', 220, 'g'), I('にら', 50, 'g'), I('にんにく', 10, 'g'), I('酒', 50, 'ml'), I('水', 380, 'ml'), I('砂糖', 0.5, '小さじ'), I('みりん', 2, '大さじ'), I('醤油', 2, '大さじ'), I('鶏がらスープ', 1, '小さじ'), I('ほんだし', 1, '小さじ'), I('味の素', 3, '振り'), I('黒こしょう', null, '', '適量')
+      ], ['にんにくを油で炒め、ガーリックチップを作る。', '鍋に水、酒、砂糖、みりん、醤油、鶏がらスープ、ほんだし、味の素、黒こしょうを入れる。', '豚肉、キャベツ、にら、ガーリックチップを加え、中火で約20分煮る。'], PALETTE[5], youtube + 'DId-aYJ67pk&list=PLckPTDhLTXdYLQUfd3O36rvp_cGTFRu7a&index=9', '料理研究家リュウジのバズレシピ。'),
+      seedLinkedRecipe('recipe-youtube-karaage', '至高の唐揚げ', '主菜', ['和食', '作り置き', 'YouTube'], 2, 30, 15, [
+        I('鶏もも肉', 320, 'g'), I('醤油', 3, '大さじ'), I('みりん', 1, '大さじ'), I('酒', 1, '大さじ'), I('味の素', 8, '振り'), I('にんにく', 1, '片'), I('ナツメグ', 5, '振り'), I('サラダ油', null, '', '揚げ油'), I('片栗粉', null, '', '適量'), I('レモン', null, '', '添え用', true)
+      ], ['鶏肉を一口大に切り、醤油、みりん、酒、にんにく、味の素、ナツメグで20〜30分漬ける。', '片栗粉をまぶし、鶏肉が半分浸かる程度の油で中温に揚げる。', '油を切り、レモンを添える。'], PALETTE[6], youtube + 'xGKn7TD9jaM&t=2s', '料理研究家リュウジのバズレシピ。'),
+      seedLinkedRecipe('recipe-youtube-tonjiru', '至高の豚汁', '汁物', ['和食', '作り置き', 'YouTube'], 4, 15, 25, [
+        I('豚バラ肉', 280, 'g'), I('塩', null, '', 'ひとつまみ'), I('コショウ', null, '', '適量'), I('ごぼう', 150, 'g'), I('大根', 200, 'g'), I('こんにゃく', 250, 'g'), I('にんじん', 100, 'g'), I('生姜', 10, 'g'), I('にんにく', 2, '片'), I('長ねぎ', 1, '本'), I('ごま油', 1, '大さじ'), I('水', 1000, 'ml'), I('白だし', 4, '大さじ'), I('味噌', 4, '大さじ'), I('みりん', 2, '大さじ'), I('酒', 2, '大さじ')
+      ], ['具材を食べやすく切り、豚肉を塩こしょうしてごま油で炒める。', 'ごぼう、大根、こんにゃく、にんじん、生姜、にんにくを加えて炒める。', '水、白だし、みりん、酒を加えて具材が柔らかくなるまで煮る。', '味噌を溶き入れ、長ねぎを加える。'], PALETTE[7], youtube + 'OL8o03u8l2Y', '料理研究家リュウジのバズレシピ。'),
+      seedLinkedRecipe('recipe-youtube-hoikoro', '至高の回鍋肉', '主菜', ['中華', 'YouTube'], 2, 15, 15, [
+        I('豚肩ロース肉', 250, 'g'), I('ピーマン', 3, '個'), I('キャベツ', 200, 'g'), I('長ねぎ', 50, 'g'), I('サラダ油', 2, '大さじ'), I('塩', 2, 'つまみ'), I('黒こしょう', null, '', '適量'), I('片栗粉', 4, '小さじ'), I('にんにく', 1, '片'), I('豆板醤', 1, '大さじ'), I('甜麺醤', 2, '大さじ'), I('酒', 2, '大さじ'), I('醤油', 2, '小さじ'), I('味の素', 3, '振り'), I('ラー油', null, '', 'お好みで', true)
+      ], ['豚肉と野菜を食べやすく切り、豚肉に塩こしょうと片栗粉をまぶす。', '豚肉を油で焼き、野菜を加えて炒める。', '豆板醤、甜麺醤、酒、醤油、味の素を加えて炒め合わせる。'], PALETTE[0], youtube + 'ZAw8shbXJXw&t=1s', '料理研究家リュウジのバズレシピ。'),
+      seedLinkedRecipe('recipe-youtube-shoronpo', 'やけくそ小籠包', '主菜', ['中華', 'YouTube'], 2, 10, 10, [
+        I('豚ひき肉', 200, 'g'), I('長ねぎ', 40, 'g'), I('餃子の皮', 10, '枚'), I('鶏がらスープ', 1.5, '小さじ'), I('オイスターソース', 1, '小さじ'), I('醤油', 1, '小さじ'), I('砂糖', 0.67, '小さじ'), I('塩', 1, 'つまみ'), I('ラード', null, '', '3cm分'), I('ごま油', 1, '小さじ'), I('コショウ', 4, '振り'), I('片栗粉', 0.5, '小さじ'), I('水', 140, 'ml'), I('ごま油', null, '', '容器用'), I('小ねぎ', null, '', '適量', true), I('生姜', 10, 'g', 'あれば', true)
+      ], ['豚ひき肉、長ねぎ、鶏がらスープ、オイスターソース、醤油、砂糖、塩、ラード、ごま油、こしょう、片栗粉、水を混ぜて肉だねを作る。', '耐熱容器にごま油をひき、濡らした餃子の皮を5枚敷く。', '肉だねを入れ、濡らした餃子の皮5枚をかぶせ、600Wで約5分30秒加熱する。', '小ねぎや生姜、ポン酢などを添える。'], PALETTE[1], youtube + 'kxzv_uTI-9g&t=3s', '料理研究家リュウジのバズレシピ。'),
+      seedLinkedRecipe('recipe-youtube-munetoro', 'むねトロ焼き', '主菜', ['和食', 'YouTube'], 2, 10, 10, [
+        I('鶏むね肉', 350, 'g'), I('液体塩こうじ', 1, '大さじ'), I('液体塩こうじ', 1, '小さじ'), I('片栗粉', 1, '大さじ'), I('片栗粉', 1, '小さじ'), I('サラダ油', null, '', '適量'), I('黒こしょう', null, '', '適量'), I('ガーリックパウダー', 8, '振り'), I('アジシオ', null, '', 'お好みで', true), I('レモン', null, '', '味変用', true)
+      ], ['鶏むね肉に液体塩こうじと片栗粉をもみ込み、5分置く。', '肉を湯にくぐらせて水気を切る。', '油をひいたフライパンで炒め、ガーリックパウダー、黒こしょう、塩で味を整える。'], PALETTE[2], youtube + '3-P0R48UbXI&t=254s', '料理研究家リュウジのバズレシピ。動画には「無限きのこ納豆」も収録されています。'),
+      seedLinkedRecipe('recipe-kurashiru-ozoni', '鶏肉とねぎのお雑煮', '汁物', ['和食', 'クラシル'], 2, 15, 10, [
+        I('切り餅', 2, '個'), I('鶏もも肉', 150, 'g'), I('しいたけ', 2, '個'), I('長ねぎ', 0.5, '本'), I('にんじん', 30, 'g'), I('水', 500, 'ml'), I('醤油', 1, '大さじ'), I('みりん', 1, '大さじ'), I('顆粒和風だし', 2, '小さじ'), I('三つ葉', null, '', '適量')
+      ], ['三つ葉、しいたけ、長ねぎ、にんじんを切り、鶏肉を一口大にする。', '鍋に水、醤油、みりん、顆粒和風だしを入れ、具材を煮る。', '切り餅を焼き、器に餅と汁を盛り付けて三つ葉を添える。'], PALETTE[3], 'https://www.kurashiru.com/recipes/b802b20c-21ab-4eda-8d84-4e04af357745', 'クラシルのリンク先「鶏肉とねぎのお雑煮」を登録しています。'),
+      seedLinkedRecipe('recipe-delish-niku-udon', '肉汁うどん', '主食', ['和食', 'デリッシュキッチン'], 2, 10, 15, [
+        I('冷凍うどん', 2, '玉'), I('豚バラ肉', 150, 'g'), I('長ねぎ', 1, '本'), I('サラダ油', 0.5, '大さじ'), I('砂糖', 0.5, '大さじ'), I('酒', 1, '大さじ'), I('みりん', 1, '大さじ'), I('醤油', 2, '大さじ'), I('和風顆粒だし', 0.5, '小さじ'), I('水', 400, 'ml')
+      ], ['長ねぎを3cm幅、豚肉を食べやすい大きさに切る。', '長ねぎを焼き、豚肉を加えて炒める。', '砂糖、酒、みりん、醤油、和風顆粒だし、水を加えて煮る。', 'うどんを表示どおりにゆでて水で洗い、つけ汁と別々に盛る。'], PALETTE[4], 'https://delishkitchen.tv/recipes/338078401136951560', 'デリッシュキッチンのリンク先「肉汁うどん」を登録しています。'),
+      seedRecipe('recipe-md-oyster', '豚キャベツのオイスター炒め', '主菜', ['中華', '作り置き'], 2, 10, 5, [
+        I('豚こま切れ肉', 200, 'g'), I('キャベツ', 0.25, '個'), I('にんにく', null, '', 'すりおろし'), I('ごま油', 1, '大さじ'), I('オイスターソース', 1.5, '大さじ'), I('醤油', 1, '小さじ'), I('酒', 1, '大さじ')
+      ], ['キャベツをひと口大にちぎるか、ざく切りにする。', 'フライパンでごま油とにんにくを熱し、豚肉を炒める。', '肉の色が変わったらキャベツを加え、しんなりするまで炒める。', 'オイスターソース、醤油、酒を加えて全体に絡める。'], false, PALETTE[5], '出典: クラシル「キャベツと豚肉のオイスターソース炒め」。冷蔵3〜4日。汁気をしっかり飛ばして保存します。'),
+      seedRecipe('recipe-md-rollcabbage', 'ロールキャベツ（コンソメ味）', '主菜', ['洋食', '作り置き'], 2, 15, 25, [
+        I('キャベツ', 4, '枚'), I('豚ひき肉', 200, 'g'), I('玉ねぎ', 50, 'g'), I('卵', 1, '個'), I('パン粉', 2, '大さじ'), I('塩こしょう', null, '', '少々'), I('水', 300, 'ml'), I('コンソメ', 2, '小さじ'), I('ローリエ', 1, '枚', 'あれば', true)
+      ], ['キャベツの芯を薄く削ぎ、さっとゆでて柔らかくする。', 'ひき肉、玉ねぎ、卵、パン粉、塩こしょうを混ぜて肉だねを作る。', 'キャベツで肉だねを包み、巻き終わりを下にして鍋に並べる。', '水、コンソメ、ローリエを加えて煮立て、弱火で20〜25分煮込む。'], false, PALETTE[6], '出典: クラシル「基本のロールキャベツ」。煮汁ごと冷凍できます。'),
+      seedRecipe('recipe-md-yakisoba', '豚キャベツ焼きそば', '主食', ['中華', '時短'], 2, 8, 7, [
+        I('中華麺', 2, '玉'), I('豚こま切れ肉', 150, 'g'), I('キャベツ', 3, '枚'), I('中濃ソース', 3, '大さじ'), I('醤油', 1, '小さじ'), I('オイスターソース', 1, '小さじ'), I('サラダ油', 1, '大さじ')
+      ], ['キャベツをざく切りにする。', '油を熱したフライパンで豚肉を炒め、色が変わったらキャベツを加える。', '麺を加えてほぐしながら炒め、中濃ソース、醤油、オイスターソースを絡める。'], false, PALETTE[7], '出典: デリッシュキッチン「昼食にぴったり♪豚肉とキャベツの焼きそば」。麺の食感が落ちやすいため、当日〜翌日中がおすすめです。'),
+      seedRecipe('recipe-md-teriyaki', '鶏むね肉の照り焼き', '主菜', ['和食', '作り置き'], 2, 10, 10, [
+        I('鶏むね肉', 300, 'g'), I('片栗粉', 1, '大さじ'), I('サラダ油', 0.5, '大さじ'), I('醤油', 1.5, '大さじ'), I('みりん', 1.5, '大さじ'), I('砂糖', 1, '小さじ')
+      ], ['鶏むね肉を一口大に切り、片栗粉を薄くまぶす。', '油を熱したフライパンで鶏肉の両面を焼く。', '醤油、みりん、砂糖を混ぜて加え、とろみがつくまで絡める。'], false, PALETTE[0], '出典: クラシル「鶏むね肉の照り焼き」。タレごと冷凍できます。'),
+      seedRecipe('recipe-md-mugenpepper', '無限ピーマン', '副菜', ['和食', '時短'], 2, 5, 5, [
+        I('ピーマン', 4, '個'), I('ツナ缶', 1, '缶'), I('めんつゆ', 1, '大さじ'), I('ごま油', 1, '小さじ'), I('白いりごま', null, '', '少々', true)
+      ], ['ピーマンを縦に細切りにする。', '耐熱容器に入れてラップをし、電子レンジ600Wで1〜2分加熱する。', '水気を切り、ツナ、めんつゆ、ごま油と和えて白いりごまを振る。'], false, PALETTE[1], '出典: クラシル「ツナ缶で簡単 やみつき無限ピーマン」。冷蔵で4〜5日ほど保存できます。'),
+      seedRecipe('recipe-md-ajitama', '味玉（めんつゆ漬け）', '副菜', ['和食', '作り置き'], 4, 10, 0, [
+        I('卵', 4, '個'), I('めんつゆ', 100, 'ml'), I('水', 50, 'ml', 'お好みで')
+      ], ['沸騰した湯で卵を6〜7分ゆで、氷水で冷やして殻をむく。', '保存袋にめんつゆと卵を入れ、空気を抜いて閉じる。', '冷蔵庫で半日〜一晩漬け込む。'], false, PALETTE[2], '出典: クラシル「とろーり半熟ゆで卵で作るしみしみ味玉」。冷蔵で4〜5日。')
+    ];
+  }
+
   function createSeedState() {
     var master = [
       ['豚こま肉', '肉・魚', 'g', ['豚肉']],
@@ -214,28 +287,78 @@
       ['めんつゆ', '調味料', '大さじ', []],
       ['片栗粉', '乾物', '大さじ', []],
       ['生姜', '野菜', '', ['しょうが']],
-      ['わかめ', '乾物', '', []]
+      ['わかめ', '乾物', '', []],
+      ['鶏もも肉', '肉・魚', 'g', ['鶏肉']],
+      ['豚ひき肉', '肉・魚', 'g', ['ひき肉']],
+      ['豚肩ロース肉', '肉・魚', 'g', ['豚肉']],
+      ['鰹粉', '乾物', 'g', []],
+      ['粉末ソース', '調味料', '袋', []],
+      ['カレー粉', '調味料', '小さじ', []],
+      ['オイスターソース', '調味料', '大さじ', []],
+      ['コショウ', '調味料', '振り', ['こしょう']],
+      ['黒こしょう', '調味料', '', ['黒胡椒']],
+      ['塩こしょう', '調味料', '', ['塩コショウ']],
+      ['長ねぎ', '野菜', '本', ['ねぎ', '長葱']],
+      ['にんにく', '野菜', '片', []],
+      ['ラード', '調味料', '大さじ', []],
+      ['もやし', '野菜', 'g', []],
+      ['青のり', '乾物', '', ['青海苔']],
+      ['紅生姜', '調味料', '', []],
+      ['塩', '調味料', '小さじ', []],
+      ['マヨネーズ', '調味料', '大さじ', []],
+      ['ナツメグ', '調味料', '振り', []],
+      ['バター', '冷蔵', 'g', []],
+      ['パン粉', '乾物', '大さじ', []],
+      ['粒マスタード', '調味料', '', []],
+      ['マッシュルーム', '野菜', 'g', []],
+      ['ケチャップ', '調味料', '大さじ', []],
+      ['ご飯', '主食', 'g', []],
+      ['ウスターソース', '調味料', '小さじ', []],
+      ['薄力粉', '乾物', 'g', []],
+      ['白だし', '調味料', '大さじ', []],
+      ['天かす', '乾物', 'g', []],
+      ['鰹節', '乾物', 'g', []],
+      ['ソース', '調味料', '', []],
+      ['きざみ海苔', '乾物', '', []],
+      ['水菜', '野菜', 'g', []],
+      ['にら', '野菜', 'g', []],
+      ['鶏がらスープ', '調味料', '小さじ', []],
+      ['ほんだし', '調味料', '小さじ', []],
+      ['豆板醤', '調味料', '大さじ', []],
+      ['甜麺醤', '調味料', '大さじ', []],
+      ['ラー油', '調味料', '', []],
+      ['ごぼう', '野菜', 'g', []],
+      ['大根', '野菜', 'g', []],
+      ['こんにゃく', '野菜', 'g', []],
+      ['液体塩こうじ', '調味料', '大さじ', []],
+      ['ガーリックパウダー', '調味料', '振り', []],
+      ['アジシオ', '調味料', '', []],
+      ['レモン', '野菜', '', []],
+      ['しめじ', '野菜', 'パック', []],
+      ['エリンギ', '野菜', 'パック', []],
+      ['納豆', '冷蔵', 'パック', []],
+      ['小ねぎ', '野菜', '', []],
+      ['餃子の皮', '冷蔵', '枚', []],
+      ['切り餅', '主食', '個', []],
+      ['しいたけ', '野菜', '個', []],
+      ['三つ葉', '野菜', '', []],
+      ['顆粒和風だし', '調味料', '小さじ', []],
+      ['冷凍うどん', '主食', '玉', []],
+      ['和風顆粒だし', '調味料', '小さじ', []],
+      ['水', '飲料', 'ml', []],
+      ['ローリエ', '調味料', '枚', []],
+      ['中濃ソース', '調味料', '大さじ', []],
+      ['白いりごま', '乾物', '', []]
     ].map(function (item) {
       return { id: normalize(item[0]).replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]/g, '-'), canonicalName: item[0], category: item[1], defaultUnit: item[2], aliases: item[3] };
     });
-    var currentWeek = isoDate(mondayOf(new Date()));
-    var recipes = [
-      seedRecipe('recipe-yakibuta', '生姜焼き', '主菜', ['和食', '平日'], 2, 10, 10, [defaultIngredient('豚こま肉', 300, 'g'), defaultIngredient('玉ねぎ', 0.5, '個'), defaultIngredient('醤油', 1, '大さじ'), defaultIngredient('みりん', 1, '大さじ'), defaultIngredient('生姜', null, '', 'すりおろし')], ['玉ねぎを薄切りにし、豚肉は食べやすい大きさにする。', '調味料を混ぜ合わせ、フライパンで玉ねぎと豚肉を炒める。', '火が通ったらたれを加え、照りが出るまで煮からめる。'], true, PALETTE[0], '甘辛い定番の生姜焼き。ごはんが進む平日向けの一皿です。'),
-      seedRecipe('recipe-hoikoro', '回鍋肉', '主菜', ['中華', '野菜たっぷり'], 2, 10, 12, [defaultIngredient('豚バラ肉', 250, 'g'), defaultIngredient('キャベツ', 0.25, '個'), defaultIngredient('ピーマン', 2, '個'), defaultIngredient('味噌', 1, '大さじ'), defaultIngredient('醤油', 1, '大さじ'), defaultIngredient('ごま油', 1, '大さじ')], ['キャベツとピーマンをひと口大に切る。', '豚肉を炒め、野菜を加えて強火でさっと火を通す。', '合わせ調味料を加え、全体を手早く炒め合わせる。'], false, PALETTE[1]),
-      seedRecipe('recipe-teriyaki', '鶏むね肉の照り焼き', '主菜', ['和食', '作り置き'], 2, 10, 10, [defaultIngredient('鶏むね肉', 300, 'g'), defaultIngredient('醤油', 1, '大さじ'), defaultIngredient('みりん', 1, '大さじ'), defaultIngredient('酒', 1, '大さじ'), defaultIngredient('砂糖', 0.5, '大さじ'), defaultIngredient('片栗粉', 1, '大さじ')], ['鶏肉をそぎ切りにし、片栗粉を薄くまぶす。', '皮目から焼き、両面に焼き色をつける。', '調味料を加え、つやが出るまで煮詰める。'], false, PALETTE[2]),
-      seedRecipe('recipe-rollcabbage', 'ロールキャベツ', '主菜', ['洋食', '週末'], 2, 20, 35, [defaultIngredient('キャベツ', 4, '枚'), defaultIngredient('合いびき肉', 200, 'g'), defaultIngredient('玉ねぎ', 0.5, '個'), defaultIngredient('卵', 1, '個'), defaultIngredient('コンソメ', 1, '個')], ['キャベツの葉をしんなりするまでゆでる。', '肉だねを混ぜ、キャベツで包んで巻き終わりを下にする。', '鍋に並べてコンソメで30分ほど煮込む。'], false, PALETTE[3]),
-      seedRecipe('recipe-yakisoba', '豚キャベツ焼きそば', '主食', ['中華', '時短'], 2, 8, 7, [defaultIngredient('豚こま肉', 150, 'g'), defaultIngredient('キャベツ', 0.15, '個'), defaultIngredient('中華麺', 2, '玉'), defaultIngredient('醤油', 1, '大さじ'), defaultIngredient('ごま油', 1, '小さじ')], ['具材を食べやすく切り、豚肉から炒める。', 'キャベツと麺を加えてほぐしながら炒める。', '醤油とごま油で味を整える。'], false, PALETTE[4]),
-      seedRecipe('recipe-mugenpepper', '無限ピーマン', '副菜', ['和食', '時短'], 2, 5, 5, [defaultIngredient('ピーマン', 4, '個'), defaultIngredient('ツナ缶', 1, '缶'), defaultIngredient('ごま油', 1, '小さじ'), defaultIngredient('醤油', 1, '小さじ')], ['ピーマンを細切りにする。', '耐熱容器に材料を入れ、電子レンジで3分加熱する。', 'よく混ぜて味をなじませる。'], false, PALETTE[5]),
-      seedRecipe('recipe-ajitama', '味玉', '副菜', ['和食', '作り置き'], 4, 5, 8, [defaultIngredient('卵', 4, '個'), defaultIngredient('めんつゆ', 4, '大さじ')], ['卵を好みの固さにゆで、冷水で冷やして殻をむく。', '保存袋に卵とめんつゆを入れ、冷蔵庫で半日漬ける。'], false, PALETTE[6]),
-      seedRecipe('recipe-hijiki', 'ひじきの煮物', '副菜', ['和食', '作り置き'], 4, 10, 15, [defaultIngredient('ひじき', 20, 'g'), defaultIngredient('にんじん', 0.5, '本'), defaultIngredient('油揚げ', 1, '枚'), defaultIngredient('醤油', 2, '大さじ'), defaultIngredient('みりん', 1, '大さじ')], ['ひじきを戻し、にんじんと油揚げを細切りにする。', '具材を炒め、だしと調味料を加える。', '汁気が少なくなるまで煮含める。'], false, PALETTE[7]),
-      seedRecipe('recipe-misosoup', '豆腐とわかめの味噌汁', '汁物', ['和食', '定番'], 2, 5, 8, [defaultIngredient('豆腐', 0.5, '丁'), defaultIngredient('味噌', 2, '大さじ'), defaultIngredient('わかめ', null, '', '乾燥・適量')], ['鍋にだしを温め、豆腐を加える。', '火を弱めて味噌を溶き入れ、わかめを加える。'], false, PALETTE[2]),
-      seedRecipe('recipe-potatosalad', 'ポテトサラダ', '副菜', ['洋食', '作り置き'], 3, 15, 12, [defaultIngredient('じゃがいも', 3, '個'), defaultIngredient('にんじん', 0.5, '本'), defaultIngredient('卵', 1, '個'), defaultIngredient('酢', 1, '小さじ')], ['じゃがいもとにんじんをゆで、卵もゆでる。', '熱いうちにじゃがいもをつぶし、酢を混ぜる。', '具材を合わせて味を整える。'], false, PALETTE[1])
-    ];
+    var recipes = createRequestedSeedRecipes();
     recipes.forEach(function (recipe) {
       recipe.ingredients.forEach(function (item) { item.ingredientId = ingredientIdFromMaster(master, item.displayName); });
     });
     return {
       version: 1,
+      seedVersion: SEED_DATA_VERSION,
       recipes: recipes,
       ingredientMaster: master,
       tags: [
@@ -247,14 +370,7 @@
         { id: 'tag-main', name: '主菜', type: 'category' },
         { id: 'tag-side', name: '副菜', type: 'category' }
       ],
-      mealPlans: [
-        { id: uid('meal'), date: currentWeek, mealSlot: 'dinner', recipeId: 'recipe-hoikoro', servings: 2, note: '' },
-        { id: uid('meal'), date: isoDate(addDays(dateFromISO(currentWeek), 1)), mealSlot: 'dinner', recipeId: 'recipe-yakisoba', servings: 2, note: '' },
-        { id: uid('meal'), date: isoDate(addDays(dateFromISO(currentWeek), 2)), mealSlot: 'dinner', recipeId: 'recipe-rollcabbage', servings: 2, note: '' },
-        { id: uid('meal'), date: isoDate(addDays(dateFromISO(currentWeek), 4)), mealSlot: 'dinner', recipeId: 'recipe-teriyaki', servings: 2, note: '' },
-        { id: uid('meal'), date: isoDate(addDays(dateFromISO(currentWeek), 6)), mealSlot: 'dinner', recipeId: 'recipe-yakibuta', servings: 2, note: '' },
-        { id: uid('meal'), date: isoDate(addDays(dateFromISO(currentWeek), 6)), mealSlot: 'dinner', recipeId: 'recipe-misosoup', servings: 2, note: '' }
-      ],
+      mealPlans: [],
       shoppingLists: [],
       pantryItems: [
         { id: uid('pantry'), ingredientId: '醤油', alwaysAvailable: true },
@@ -306,7 +422,10 @@
     parsed.cookingHistory = Array.isArray(parsed.cookingHistory) ? parsed.cookingHistory : [];
     parsed.importSources = Array.isArray(parsed.importSources) ? parsed.importSources : [];
     parsed.tags = Array.isArray(parsed.tags) ? parsed.tags : [];
-    parsed.recipes.forEach(function (recipe) { normalizeRecord(recipe, migratedAt); });
+    parsed.recipes.forEach(function (recipe) {
+      normalizeRecord(recipe, migratedAt);
+      if (recipe.sourceType !== 'json_ld' && recipe.sourceUrl) recipe.sourceType = 'web';
+    });
     parsed.mealPlans.forEach(function (meal) { normalizeRecord(meal, migratedAt); });
     parsed.shoppingLists.forEach(function (list) {
       normalizeRecord(list, migratedAt);
@@ -333,6 +452,7 @@
     parsed.sync.schemaVersion = SYNC_SCHEMA_VERSION;
     parsed.sync.deviceId = parsed.sync.deviceId || createDeviceId();
     parsed.version = 2;
+    parsed.seedVersion = Number(parsed.seedVersion || 0);
     return parsed;
   }
 
@@ -342,12 +462,26 @@
     return found ? found.id : 'custom-' + key;
   }
 
+  function isLegacySeedState(parsed) {
+    if (!parsed || Number(parsed.seedVersion || 0) >= SEED_DATA_VERSION || !Array.isArray(parsed.recipes)) return false;
+    var activeRecipes = parsed.recipes.filter(function (recipe) { return !recipe.deletedAt; });
+    return activeRecipes.length > 0 && activeRecipes.length <= LEGACY_SEED_IDS.length && activeRecipes.every(function (recipe) { return LEGACY_SEED_IDS.indexOf(recipe.id) !== -1; });
+  }
+
   function loadState() {
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         var parsed = JSON.parse(raw);
         if (parsed && (parsed.version === 1 || parsed.version === 2)) {
+          if (isLegacySeedState(parsed)) {
+            var replacement = normalizeState(createSeedState());
+            replacement.settings = Object.assign({}, replacement.settings, parsed.settings || {});
+            replacement.sync.deviceId = parsed.sync && parsed.sync.deviceId ? parsed.sync.deviceId : replacement.sync.deviceId;
+            replacement.seedVersion = SEED_DATA_VERSION;
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(replacement)); } catch (error) { /* private browsing may block storage */ }
+            return replacement;
+          }
           return normalizeState(parsed);
         }
       }
@@ -1085,7 +1219,7 @@
       '<div class="detail-layout"><div><section class="panel detail-hero"><div class="tag-list"><span class="pill">' + escapeHTML(recipe.category || '未分類') + '</span>' + (recipe.tags || []).map(function (tag) { return '<span class="pill">' + escapeHTML(tag) + '</span>'; }).join('') + '</div><h1>' + escapeHTML(recipe.title) + '</h1><p class="detail-description">' + escapeHTML(recipe.description || 'このレシピにはまだ説明がありません。') + '</p><div class="detail-actions"><button class="button button-primary" type="button" data-action="open-add-meal" data-recipe-id="' + escapeAttr(id) + '">献立に追加</button><a class="button" href="#/recipes/' + escapeAttr(id) + '/cook">調理モードを開始</a>' + (recipe.sourceUrl ? '<a class="button button-quiet" target="_blank" rel="noreferrer" href="' + escapeAttr(recipe.sourceUrl) + '">元ページを開く ↗</a>' : '') + '</div><div class="detail-stats"><div class="detail-stat"><small>調理時間</small><strong>' + escapeHTML(timeLabel(recipe)) + '</strong></div><div class="detail-stat"><small>元の人数</small><strong>' + escapeHTML(recipe.originalServings + '人前') + '</strong></div><div class="detail-stat"><small>評価</small><strong class="rating">' + (average ? '★ ' + average.toFixed(1) : '☆ —') + '</strong></div><div class="detail-stat"><small>お気に入り</small><strong><button class="favorite-button ' + (recipe.favorite ? 'is-favorite' : '') + '" type="button" data-action="favorite" data-id="' + escapeAttr(id) + '" aria-label="お気に入り">' + (recipe.favorite ? '★' : '☆') + '</button></strong></div></div></section>' +
       '<section class="panel detail-section"><div class="section-heading"><div><h2>材料</h2><p>人数に合わせて数量を計算表示しています。元データは変わりません。</p></div><div class="servings-control"><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="-1" aria-label="人数を減らす">−</button><output>' + escapeHTML(servings) + '人前</output><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="1" aria-label="人数を増やす">＋</button></div></div><ul class="ingredient-list">' + ingredientRows + '</ul></section>' +
       '<section class="panel detail-section"><div class="section-heading"><h2>作り方</h2></div><ol class="step-list">' + stepRows + '</ol></section></div>' +
-      '<aside class="side-stack"><section class="panel"><div class="section-heading"><div><h3>調理履歴</h3><p>作った記録がここに残ります。</p></div></div><div class="history-stat-grid"><div class="history-stat"><strong>' + history.length + '</strong><small>調理回数</small></div><div class="history-stat"><strong>' + (lastCooked(id) ? formatDate(lastCooked(id)) : '—') + '</strong><small>最終調理</small></div><div class="history-stat"><strong>' + (average ? average.toFixed(1) : '—') + '</strong><small>平均評価</small></div></div>' + (historyRows ? '<div class="history-list" style="margin-top:14px">' + historyRows + '</div>' : '<p class="field-note" style="margin-top:16px">まだ調理履歴はありません。</p>') + '</section><section class="panel"><h3 style="margin:0 0 13px;font-size:14px">レシピ情報</h3><p class="field-note">登録日：' + escapeHTML(formatDate(String(recipe.createdAt).slice(0, 10))) + '</p><p class="field-note">更新日：' + escapeHTML(formatDate(String(recipe.updatedAt).slice(0, 10))) + '</p><p class="field-note">登録方法：' + (recipe.sourceType === 'json_ld' ? 'JSON-LDインポート' : '手動入力') + '</p></section></aside></div>';
+      '<aside class="side-stack"><section class="panel"><div class="section-heading"><div><h3>調理履歴</h3><p>作った記録がここに残ります。</p></div></div><div class="history-stat-grid"><div class="history-stat"><strong>' + history.length + '</strong><small>調理回数</small></div><div class="history-stat"><strong>' + (lastCooked(id) ? formatDate(lastCooked(id)) : '—') + '</strong><small>最終調理</small></div><div class="history-stat"><strong>' + (average ? average.toFixed(1) : '—') + '</strong><small>平均評価</small></div></div>' + (historyRows ? '<div class="history-list" style="margin-top:14px">' + historyRows + '</div>' : '<p class="field-note" style="margin-top:16px">まだ調理履歴はありません。</p>') + '</section><section class="panel"><h3 style="margin:0 0 13px;font-size:14px">レシピ情報</h3><p class="field-note">登録日：' + escapeHTML(formatDate(String(recipe.createdAt).slice(0, 10))) + '</p><p class="field-note">更新日：' + escapeHTML(formatDate(String(recipe.updatedAt).slice(0, 10))) + '</p><p class="field-note">登録方法：' + (recipe.sourceType === 'json_ld' ? 'JSON-LDインポート' : recipe.sourceType === 'web' ? 'URL登録' : '手動入力') + '</p></section></aside></div>';
   }
 
   function mealsFor(date, slot) {
@@ -1206,7 +1340,7 @@
   }
 
   function renderSettings() {
-    return '<div class="page-heading"><div><a class="link" href="#/more">← その他</a><p class="eyebrow" style="margin-top:15px">Settings</p><h1>設定</h1><p>見た目と、買い物リストのふるまいを変更できます。</p></div></div><section class="panel form-panel"><div class="form-grid"><div class="field"><label for="theme-setting">テーマ</label><select id="theme-setting" data-setting="theme"><option value="dark"' + (state.settings.theme === 'dark' ? ' selected' : '') + '>Dark（推奨）</option><option value="light"' + (state.settings.theme === 'light' ? ' selected' : '') + '>Light</option><option value="system"' + (state.settings.theme === 'system' ? ' selected' : '') + '>System</option></select><span class="field-note">設定はこのブラウザに保存されます。</span></div><div class="field"><label>買い物</label><label class="check-label"><input type="checkbox" data-setting="excludePantry" ' + (state.settings.excludePantry ? 'checked' : '') + '> 常備品を自動で除外する</label><span class="field-note">除外済みの品は、各リストから復元できます。</span></div><div class="field"><label for="backup-retention-setting">Driveバックアップ保持数</label><select id="backup-retention-setting" data-setting="backupRetention">' + [1, 3, 5, 7, 10].map(function (count) { return '<option value="' + count + '"' + (Number(state.settings.backupRetention || 5) === count ? ' selected' : '') + '>' + count + '個</option>'; }).join('') + '</select><span class="field-note">最大10個。古いバックアップを削除する前に確認します。</span></div></div></section><section class="panel form-panel" style="margin-top:16px"><div class="section-heading"><div><h2>サンプルデータ</h2><p>初回起動時と同じ10件のレシピに戻します。</p></div><button class="button button-danger" type="button" data-action="reset-data">サンプルデータを再読込</button></div><p class="field-note">この操作は現在のブラウザ内データを置き換えます。必要なデータがある場合は実行しないでください。</p></section>';
+    return '<div class="page-heading"><div><a class="link" href="#/more">← その他</a><p class="eyebrow" style="margin-top:15px">Settings</p><h1>設定</h1><p>見た目と、買い物リストのふるまいを変更できます。</p></div></div><section class="panel form-panel"><div class="form-grid"><div class="field"><label for="theme-setting">テーマ</label><select id="theme-setting" data-setting="theme"><option value="dark"' + (state.settings.theme === 'dark' ? ' selected' : '') + '>Dark（推奨）</option><option value="light"' + (state.settings.theme === 'light' ? ' selected' : '') + '>Light</option><option value="system"' + (state.settings.theme === 'system' ? ' selected' : '') + '>System</option></select><span class="field-note">設定はこのブラウザに保存されます。</span></div><div class="field"><label>買い物</label><label class="check-label"><input type="checkbox" data-setting="excludePantry" ' + (state.settings.excludePantry ? 'checked' : '') + '> 常備品を自動で除外する</label><span class="field-note">除外済みの品は、各リストから復元できます。</span></div><div class="field"><label for="backup-retention-setting">Driveバックアップ保持数</label><select id="backup-retention-setting" data-setting="backupRetention">' + [1, 3, 5, 7, 10].map(function (count) { return '<option value="' + count + '"' + (Number(state.settings.backupRetention || 5) === count ? ' selected' : '') + '>' + count + '個</option>'; }).join('') + '</select><span class="field-note">最大10個。古いバックアップを削除する前に確認します。</span></div></div></section><section class="panel form-panel" style="margin-top:16px"><div class="section-heading"><div><h2>初期レシピデータ</h2><p>このアプリに同梱した指定URL・Markdownのレシピに戻します。</p></div><button class="button button-danger" type="button" data-action="reset-data">初期レシピを再読込</button></div><p class="field-note">この操作は現在のブラウザ内データを置き換えます。必要なデータがある場合は実行しないでください。</p></section>';
   }
 
   function renderImportPage() {

@@ -33,7 +33,7 @@ originalText を材料ごとに保持し、数値数量だけを献立人数に�
 
 ### Implemented Features
 
-- 10件のサンプルレシピ seed
+- 指定URLとMarkdown本文から作成した19件の初期レシピ seed
 - Dense List default / Card toggle / search / category / tag / favorite / time filter / sorting
 - Search and filter controls collapsed by default and expandable on demand
 - Manual recipe create/edit/delete
