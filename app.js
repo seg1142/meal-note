@@ -42,6 +42,7 @@
     shoppingView: state.settings.shoppingView || 'category',
     importDraft: null,
     importError: '',
+    urlFallback: null,
     cookSessions: {},
     pendingImport: null,
     dataError: ''
@@ -476,7 +477,10 @@
     parsed.shoppingLists.forEach(function (list) {
       normalizeRecord(list, migratedAt);
       list.items = Array.isArray(list.items) ? list.items : [];
-      list.items.forEach(function (item) { normalizeRecord(item, list.updatedAt || migratedAt); });
+      list.items.forEach(function (item) {
+        normalizeRecord(item, list.updatedAt || migratedAt);
+        item.sourceRecipeIds = Array.isArray(item.sourceRecipeIds) ? item.sourceRecipeIds : [];
+      });
     });
     parsed.pantryItems.forEach(function (item) { normalizeRecord(item, migratedAt); });
     parsed.cookingHistory.forEach(function (item) { normalizeRecord(item, item.cookedAt || migratedAt); });
@@ -1090,7 +1094,13 @@
     if (path.indexOf('/cook') !== -1) requestWakeLock();
   }
 
-  window.addEventListener('hashchange', render);
+  window.addEventListener('hashchange', function () {
+    if (routePath() !== '/recipes') {
+      ui.selectionMode = false;
+      ui.selectedRecipes = {};
+    }
+    render();
+  });
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () { if (state.settings.theme === 'system') render(); });
 
   function recipeMatches(recipe) {
@@ -1132,7 +1142,7 @@
     var categories = ['主菜', '副菜', '主食', '汁物', 'おつまみ'];
     var recipes = filteredRecipes();
     var action = ui.selectionMode
-      ? '<button class="button button-primary" type="button" data-action="bulk-shopping">選択したレシピから作成</button>'
+      ? '<div class="selection-actions"><button class="button" type="button" data-action="cancel-select-mode">キャンセル</button><button class="button button-primary" type="button" data-action="bulk-shopping">選択したレシピから作成</button></div>'
       : '<button class="button" type="button" data-action="toggle-select-mode">複数選択</button>';
     var heading = '<div class="page-heading"><div><p class="eyebrow">Recipe library</p><h1>レシピ</h1><p>作ったもの、作りたいものを、すぐ見つけられる場所。</p></div><div class="heading-actions"><a class="button" href="#/recipes/import">URLから取り込む</a><a class="button button-primary" href="#/recipes/new"><span aria-hidden="true">＋</span> レシピを追加</a></div></div>';
     var filtersActive = Boolean(ui.search || ui.category !== 'すべて' || ui.tag !== 'すべて' || ui.favoriteOnly || ui.maxTime || ui.sort !== 'recent');
@@ -1156,7 +1166,7 @@
       var selected = ui.selectedRecipes[recipe.id];
       var ingredients = (recipe.ingredients || []).slice(0, 4).map(function (item) { return item.displayName; }).join(' / ');
       return '<div class="recipe-row">' +
-        (ui.selectionMode ? '<label class="check-label"><input type="checkbox" data-action="select-recipe" data-id="' + escapeAttr(recipe.id) + '" ' + (selected ? 'checked' : '') + '><span class="sr-only">選択</span></label>' : '') +
+        (ui.selectionMode ? '<label class="check-label recipe-select-hitarea"><input type="checkbox" data-selection-checkbox data-id="' + escapeAttr(recipe.id) + '" ' + (selected ? 'checked' : '') + '><span class="sr-only">選択</span></label>' : '') +
         '<div class="recipe-main"><span class="recipe-swatch" style="--swatch:' + escapeAttr(recipe.color || PALETTE[0]) + '"></span><div><a class="recipe-title" href="#/recipes/' + escapeAttr(recipe.id) + '">' + escapeHTML(recipe.title) + '</a><span class="recipe-sub">' + escapeHTML(ingredients || '材料未登録') + '</span></div></div>' +
         '<div class="recipe-category"><strong>' + escapeHTML(recipe.category || '未分類') + '</strong><span>' + escapeHTML((recipe.tags || []).slice(0, 2).join(' · ')) + '</span></div>' +
         '<div class="recipe-tags">' + escapeHTML(ingredients || '—') + '</div>' +
@@ -1325,7 +1335,7 @@
     }
     return '<div class="page-heading"><div><p class="eyebrow">Shopping list</p><h1>買い物</h1><p>献立の材料を、売り場で迷わない形にまとめます。</p></div><div class="heading-actions"><button class="button" type="button" data-action="open-manual-shopping">＋ 手動で追加</button><button class="button button-primary" type="button" data-action="generate-shopping" data-start="' + isoDate(weekStart(ui.weekOffset)) + '" data-end="' + isoDate(addDays(weekStart(ui.weekOffset), 6)) + '">今週から再生成</button></div></div>' +
       '<div class="shopping-header"><span class="shopping-summary">' + (list ? escapeHTML(list.name) + ' · ' + checked + '/' + visible.length + '件チェック済み' : '献立から自動生成') + '</span><div class="segmented" aria-label="買い物リストの表示形式"><button type="button" class="' + (ui.shoppingView === 'category' ? 'active' : '') + '" data-action="set-shopping-view" data-view="category">売り場別</button><button type="button" class="' + (ui.shoppingView === 'recipe' ? 'active' : '') + '" data-action="set-shopping-view" data-view="recipe">レシピ別</button></div></div>' +
-      (list ? '<div class="shopping-tools"><label class="check-label"><input type="checkbox" data-action="show-excluded" ' + (ui.showExcluded ? 'checked' : '') + '> 除外した項目も表示</label></div>' : '') + '<div id="shoppingContent">' + content + '</div>';
+      (list ? renderShoppingRecipeSelection(list) + '<div class="shopping-tools"><label class="check-label"><input type="checkbox" data-action="show-excluded" ' + (ui.showExcluded ? 'checked' : '') + '> 除外した項目も表示</label></div>' : '') + '<div id="shoppingContent">' + content + '</div>';
   }
 
   function renderShoppingByCategory(items, list) {
@@ -1394,7 +1404,9 @@
   }
 
   function renderImportPage() {
-    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URLから取り込む</h1><p>Schema.org の JSON-LD Recipe を検出し、保存前に編集できます。</p></div></div><section class="panel form-panel"><div class="notice">外部サイトの読み込みはブラウザの CORS 制約を受けます。URL取得に失敗した場合は、ページの JSON-LD を貼り付けてレビューできます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピページのURL</label><input id="import-url" name="url" type="url" placeholder="https://example.com/recipe"></div><div class="field"><label for="import-source">JSON-LD またはページHTML（任意）</label><textarea id="import-source" name="source" placeholder="script[type=&quot;application/ld+json&quot;] の内容、またはHTMLを貼り付け"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div><div class="form-actions"><button class="button button-primary" type="submit">解析してレビュー</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + '</section>';
+    var fallback = ui.urlFallback;
+    var fallbackHtml = fallback ? '<section class="url-fallback"><div><h2>タイトルと備考だけで登録</h2><p>このURLからレシピ情報を自動取得できませんでした。タイトルと備考を保存し、材料・工程はあとから編集できます。</p></div><form class="form-layout" data-form="url-fallback" data-source-url="' + escapeAttr(fallback.sourceUrl) + '"><div class="field"><label for="fallback-title">タイトル</label><input id="fallback-title" name="title" value="' + escapeAttr(fallback.title || '') + '" placeholder="例：動画のレシピ名" required></div><div class="field"><label for="fallback-description">備考・メモ</label><textarea id="fallback-description" name="description" placeholder="材料や作り方のメモを貼り付けできます。">' + escapeHTML(fallback.description || '') + '</textarea></div><div class="form-actions"><button class="button button-primary" type="submit">URLと備考で保存</button><button class="button button-quiet" type="button" data-action="clear-import">キャンセル</button></div></form></section>' : '';
+    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URLから取り込む</h1><p>通常はURLを貼り付けるだけで解析し、保存前に内容を確認できます。</p></div></div><section class="panel form-panel"><div class="notice">外部サイトの読み込みはブラウザの CORS 制約を受けます。取得できない場合も、タイトルと備考だけでURLを登録できます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピページのURL</label><input id="import-url" name="url" type="url" value="' + escapeAttr(fallback ? fallback.sourceUrl : '') + '" placeholder="https://example.com/recipe"></div><div class="field"><label for="import-source">JSON-LD またはページHTML（任意）</label><textarea id="import-source" name="source" placeholder="通常は空欄のままで大丈夫です。必要な場合のみ貼り付けます。"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div><div class="form-actions"><button class="button button-primary" type="submit">解析してレビュー</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + fallbackHtml + '</section>';
   }
 
   function renderImportReview() {
@@ -1478,6 +1490,26 @@
     return Object.keys(ui.selectedRecipes).filter(function (id) { return ui.selectedRecipes[id]; });
   }
 
+  function shoppingRecipeIds(list) {
+    var ids = [];
+    (list && list.items || []).filter(function (item) { return !item.deletedAt && !item.manualItem; }).forEach(function (item) {
+      var itemIds = Array.isArray(item.sourceRecipeIds) && item.sourceRecipeIds.length ? item.sourceRecipeIds : (item.sourceRecipes || []).map(function (title) {
+        var recipe = state.recipes.find(function (candidate) { return !candidate.deletedAt && candidate.title === title; });
+        return recipe ? recipe.id : null;
+      }).filter(Boolean);
+      itemIds.forEach(function (id) { if (ids.indexOf(id) === -1 && recipeById(id)) ids.push(id); });
+    });
+    return ids;
+  }
+
+  function renderShoppingRecipeSelection(list) {
+    var recipes = shoppingRecipeIds(list).map(recipeById).filter(function (recipe) { return recipe && !recipe.deletedAt; });
+    if (!recipes.length) return '';
+    return '<details class="shopping-recipe-selection"><summary><span><strong>選択中のレシピ</strong><small>買い物リストに反映中</small></span><span class="pill">' + recipes.length + '件</span></summary><div class="shopping-recipe-chips">' + recipes.map(function (recipe) {
+      return '<span class="shopping-recipe-chip"><a href="#/recipes/' + escapeAttr(recipe.id) + '">' + escapeHTML(recipe.title) + '</a><button class="text-button danger" type="button" data-action="remove-shopping-recipe" data-list-id="' + escapeAttr(list.id) + '" data-recipe-id="' + escapeAttr(recipe.id) + '" aria-label="' + escapeAttr(recipe.title) + 'を買い物リストから外す">×</button></span>';
+    }).join('') + '</div></details>';
+  }
+
   function ingredientAggregationKey(item) {
     return (item.ingredientId || 'custom-' + normalize(item.displayName)) + '|' + normalize(item.unit || '');
   }
@@ -1536,6 +1568,7 @@
             excluded: false,
             manualItem: false,
             sourceRecipes: [recipe.title],
+            sourceRecipeIds: [recipe.id],
             createdAt: nowISO(),
             updatedAt: nowISO(),
             deletedAt: null
@@ -1543,6 +1576,7 @@
         } else {
           if (grouped[key].quantity != null && quantity != null) grouped[key].quantity += quantity;
           if (grouped[key].sourceRecipes.indexOf(recipe.title) === -1) grouped[key].sourceRecipes.push(recipe.title);
+          if (grouped[key].sourceRecipeIds.indexOf(recipe.id) === -1) grouped[key].sourceRecipeIds.push(recipe.id);
         }
       });
     });
@@ -1572,6 +1606,24 @@
     return list;
   }
 
+  function removeShoppingRecipe(list, recipeId) {
+    if (!list) return;
+    var remainingRecipeIds = shoppingRecipeIds(list).filter(function (id) { return id !== recipeId; });
+    if (remainingRecipeIds.length) {
+      makeShoppingList(list.periodStart, list.periodEnd, remainingRecipeIds, { silent: true });
+      return;
+    }
+    var removedAt = nowISO();
+    (list.items || []).forEach(function (item) {
+      if (!item.manualItem && !item.deletedAt) {
+        item.deletedAt = removedAt;
+        item.updatedAt = removedAt;
+      }
+    });
+    list.updatedAt = removedAt;
+    saveState();
+  }
+
   function syncRecipeFormDraft(form) {
     var id = form.dataset.recipeId || null;
     var draft = formDraftFor(id);
@@ -1599,10 +1651,11 @@
     return draft;
   }
 
-  function saveRecipeDraft(draft, id) {
+  function saveRecipeDraft(draft, id, options) {
+    options = options || {};
     if (!draft.title) { showToast('レシピ名を入力してください。'); return null; }
-    if (!draft.ingredients.length) { showToast('材料を1つ以上入力してください。'); return null; }
-    if (!draft.steps.length) { showToast('工程を1つ以上入力してください。'); return null; }
+    if (!draft.ingredients.length && !options.allowIncomplete) { showToast('材料を1つ以上入力してください。'); return null; }
+    if (!draft.steps.length && !options.allowIncomplete) { showToast('工程を1つ以上入力してください。'); return null; }
     var isNew = !id;
     draft.updatedAt = nowISO();
     draft.deletedAt = null;
@@ -1724,8 +1777,10 @@
       render();
       return;
     }
-    if (action === 'select-recipe') {
-      ui.selectedRecipes[target.dataset.id] = target.checked;
+    if (action === 'cancel-select-mode') {
+      ui.selectionMode = false;
+      ui.selectedRecipes = {};
+      render();
       return;
     }
     if (action === 'bulk-shopping') {
@@ -1777,6 +1832,16 @@
       var generated = makeShoppingList(target.dataset.start, target.dataset.end);
       if (generated && routePath() !== '/shopping') location.hash = '#/shopping';
       else render();
+      return;
+    }
+    if (action === 'remove-shopping-recipe') {
+      var shoppingRecipeList = listForId(target.dataset.listId);
+      var shoppingRecipe = recipeById(target.dataset.recipeId);
+      if (shoppingRecipeList && shoppingRecipe) {
+        removeShoppingRecipe(shoppingRecipeList, shoppingRecipe.id);
+        showToast('「' + shoppingRecipe.title + '」を買い物リストから外しました。');
+        render();
+      }
       return;
     }
      if (action === 'set-shopping-view') {
@@ -1867,7 +1932,7 @@
        var deviceId = state.sync.deviceId;
        state = normalizeState(createSeedState());
        state.sync.deviceId = deviceId;
-       ui = { search: '', category: 'すべて', tag: 'すべて', favoriteOnly: false, maxTime: '', sort: 'recent', formDraft: {}, weekOffset: 0, selectionMode: false, selectedRecipes: {}, shoppingView: 'category', importDraft: null, importError: '', cookSessions: {}, pendingImport: null, dataError: '' };
+       ui = { search: '', category: 'すべて', tag: 'すべて', favoriteOnly: false, maxTime: '', sort: 'recent', formDraft: {}, weekOffset: 0, selectionMode: false, selectedRecipes: {}, shoppingView: 'category', importDraft: null, importError: '', urlFallback: null, cookSessions: {}, pendingImport: null, dataError: '' };
       saveState();
       showToast('サンプルデータを再読み込みしました。');
       location.hash = '#/recipes';
@@ -1888,7 +1953,7 @@
       render();
       return;
     }
-    if (action === 'clear-import') { ui.importDraft = null; ui.importError = ''; location.hash = '#/recipes/import'; return; }
+    if (action === 'clear-import') { ui.importDraft = null; ui.importError = ''; ui.urlFallback = null; location.hash = '#/recipes/import'; return; }
   }
 
   document.addEventListener('click', handleClick);
@@ -1904,6 +1969,10 @@
 
   document.addEventListener('change', function (event) {
      var target = event.target;
+     if (target.matches('[data-selection-checkbox]')) {
+       ui.selectedRecipes[target.dataset.id] = target.checked;
+       return;
+     }
      if (target.dataset.fileInput === 'local-json') {
        readSnapshotFile(target.files && target.files[0]);
        target.value = '';
@@ -1992,6 +2061,33 @@
     }
     if (form.dataset.form === 'import') {
       handleImportSubmit(form);
+      return;
+    }
+    if (form.dataset.form === 'url-fallback') {
+      var fallbackData = new FormData(form);
+      var fallbackUrl = String(form.dataset.sourceUrl || '').trim();
+      var fallbackDraft = {
+        id: null,
+        title: String(fallbackData.get('title') || '').trim(),
+        description: String(fallbackData.get('description') || '').trim(),
+        originalServings: 2,
+        prepTimeMinutes: 0,
+        cookTimeMinutes: 0,
+        sourceType: 'web',
+        sourceUrl: fallbackUrl,
+        thumbnailUrl: thumbnailUrlForSource(fallbackUrl),
+        favorite: false,
+        category: '主菜',
+        tags: ['URL登録'],
+        ingredients: [],
+        steps: [],
+        color: PALETTE[state.recipes.length % PALETTE.length]
+      };
+      var savedFallback = saveRecipeDraft(fallbackDraft, null, { allowIncomplete: true });
+      if (savedFallback) {
+        ui.urlFallback = null;
+        ui.importError = '';
+      }
       return;
     }
     if (form.dataset.form === 'import-review') {
@@ -2133,11 +2229,37 @@
     };
   }
 
+  function isYouTubeUrl(value) {
+    try {
+      var parsed = new URL(String(value || '').trim());
+      return ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].indexOf(parsed.hostname.toLowerCase()) !== -1;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async function prepareUrlFallback(sourceUrl, message) {
+    var title = '';
+    if (isYouTubeUrl(sourceUrl)) {
+      try {
+        var response = await fetch('https://www.youtube.com/oembed?url=' + encodeURIComponent(sourceUrl) + '&format=json');
+        if (response.ok) {
+          var metadata = await response.json();
+          title = metadata.title || '';
+        }
+      } catch (error) { /* oEmbed is optional; the user can paste the title */ }
+    }
+    ui.importError = message;
+    ui.urlFallback = { sourceUrl: sourceUrl, title: title, description: '' };
+    render();
+  }
+
   async function handleImportSubmit(form) {
     var data = new FormData(form);
     var url = String(data.get('url') || '').trim();
     var source = String(data.get('source') || '').trim();
     ui.importError = '';
+    ui.urlFallback = null;
     if (!source && !url) { ui.importError = 'URLまたはJSON-LD / HTMLを入力してください。'; render(); return; }
     var payload = extractJsonLd(source);
     if (!payload && url) {
@@ -2146,17 +2268,20 @@
         if (!response.ok) throw new Error('HTTP ' + response.status);
         payload = extractJsonLd(await response.text());
       } catch (error) {
-        ui.importError = 'URLを読み込めませんでした。サイト側のCORS制約の可能性があります。ページの JSON-LD を貼り付けて再度お試しください。';
-        render();
+        await prepareUrlFallback(url, 'URLを読み込めませんでした。タイトルと備考だけで登録することもできます。');
         return;
       }
     }
     if (!payload) {
-      ui.importError = 'Recipe形式のJSON-LDを検出できませんでした。手動入力に切り替えるか、JSON-LDの内容を貼り付けてください。';
-      render();
+      if (url) await prepareUrlFallback(url, 'Recipe形式のJSON-LDを検出できませんでした。タイトルと備考だけで登録することもできます。');
+      else {
+        ui.importError = 'Recipe形式のJSON-LDを検出できませんでした。内容を確認して再度お試しください。';
+        render();
+      }
       return;
     }
     ui.importDraft = jsonLdToDraft(payload, url);
+    ui.urlFallback = null;
     render();
   }
 
