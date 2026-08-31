@@ -165,6 +165,49 @@
     };
   }
 
+  function thumbnailUrlForSource(sourceUrl) {
+    var value = String(sourceUrl || '').trim();
+    if (!value) return '';
+    try {
+      var parsed = new URL(value);
+      var host = parsed.hostname.toLowerCase();
+      if (host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com') {
+        var videoId = parsed.searchParams.get('v');
+        if (videoId) return 'https://i.ytimg.com/vi/' + encodeURIComponent(videoId) + '/hqdefault.jpg';
+      }
+      if (host === 'youtu.be') {
+        var shortId = parsed.pathname.split('/').filter(Boolean)[0];
+        if (shortId) return 'https://i.ytimg.com/vi/' + encodeURIComponent(shortId) + '/hqdefault.jpg';
+      }
+    } catch (error) { /* invalid or partial source URL */ }
+    if (value === 'https://www.kurashiru.com/recipes/b802b20c-21ab-4eda-8d84-4e04af357745') return 'https://video.kurashiru.com/production/videos/b802b20c-21ab-4eda-8d84-4e04af357745/compressed_thumbnail_square_large.jpg?1767804426';
+    if (value === 'https://delishkitchen.tv/recipes/338078401136951560') return 'https://image.delishkitchen.tv/recipe/338078401136951560/1.jpg?version=1696488002';
+    return '';
+  }
+
+  function safeImageUrl(value) {
+    var candidate = String(value || '').trim();
+    if (!candidate) return '';
+    try {
+      var parsed = new URL(candidate, location.href);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? candidate : '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function firstRecipeImage(value) {
+    if (Array.isArray(value)) {
+      for (var index = 0; index < value.length; index += 1) {
+        var found = firstRecipeImage(value[index]);
+        if (found) return found;
+      }
+      return '';
+    }
+    if (value && typeof value === 'object') return firstRecipeImage(value.url || value.contentUrl || value.contentUrlTemplate || '');
+    return safeImageUrl(value);
+  }
+
   function seedRecipe(id, title, category, tags, servings, prep, cook, ingredients, steps, favorite, color, description) {
     return {
       id: id,
@@ -175,6 +218,7 @@
       cookTimeMinutes: cook,
       sourceType: 'manual',
       sourceUrl: '',
+      thumbnailUrl: '',
       favorite: Boolean(favorite),
       category: category,
       tags: tags,
@@ -190,6 +234,7 @@
     var recipe = seedRecipe(id, title, category, tags, servings, prep, cook, ingredients, steps, false, color, description);
     recipe.sourceType = 'web';
     recipe.sourceUrl = sourceUrl;
+    recipe.thumbnailUrl = thumbnailUrlForSource(sourceUrl);
     return recipe;
   }
 
@@ -425,6 +470,7 @@
     parsed.recipes.forEach(function (recipe) {
       normalizeRecord(recipe, migratedAt);
       if (recipe.sourceType !== 'json_ld' && recipe.sourceUrl) recipe.sourceType = 'web';
+      recipe.thumbnailUrl = String(recipe.thumbnailUrl || '').trim() || thumbnailUrlForSource(recipe.sourceUrl);
     });
     parsed.mealPlans.forEach(function (meal) { normalizeRecord(meal, migratedAt); });
     parsed.shoppingLists.forEach(function (list) {
@@ -1153,6 +1199,7 @@
         cookTimeMinutes: 10,
         sourceType: 'manual',
         sourceUrl: '',
+        thumbnailUrl: '',
         favorite: false,
         category: '主菜',
         tags: [],
@@ -1190,6 +1237,7 @@
       '<div class="field"><label for="recipe-tags">タグ</label><input id="recipe-tags" name="tags" value="' + escapeAttr(tagText) + '" placeholder="和食, 時短"></div>' +
       '<div class="field"><label for="recipe-servings">元の人数</label><input id="recipe-servings" name="originalServings" type="number" min="1" step="1" value="' + escapeAttr(draft.originalServings || 2) + '"></div>' +
       '<div class="field"><label for="recipe-source">出典URL（任意）</label><input id="recipe-source" name="sourceUrl" type="url" value="' + escapeAttr(draft.sourceUrl || '') + '" placeholder="https://..."></div>' +
+      '<div class="field full"><label for="recipe-thumbnail">サムネイル画像URL（任意）</label><input id="recipe-thumbnail" name="thumbnailUrl" type="url" value="' + escapeAttr(draft.thumbnailUrl || '') + '" placeholder="https://...jpg"><span class="field-note">YouTubeの出典URLは自動設定されます。手動登録では画像URLを指定できます。</span></div>' +
       '<div class="field"><label for="recipe-prep">下準備（分）</label><input id="recipe-prep" name="prepTimeMinutes" type="number" min="0" step="1" value="' + escapeAttr(draft.prepTimeMinutes || 0) + '"></div>' +
       '<div class="field"><label for="recipe-cook">加熱・調理（分）</label><input id="recipe-cook" name="cookTimeMinutes" type="number" min="0" step="1" value="' + escapeAttr(draft.cookTimeMinutes || 0) + '"></div>' +
       '</div></section>' +
@@ -1215,8 +1263,10 @@
     var historyRows = history.slice(0, 5).map(function (item) {
       return '<div class="history-row"><div><strong>' + escapeHTML(formatDate(item.cookedAt.slice(0, 10))) + '</strong><small>' + escapeHTML(item.servings + '人前') + '</small>' + (item.note ? '<p>' + escapeHTML(item.note) + '</p>' : '') + '</div><span class="rating">' + (item.rating ? '★ ' + item.rating : '未評価') + '</span></div>';
     }).join('');
+    var thumbnail = safeImageUrl(recipe.thumbnailUrl);
+    var detailImage = thumbnail ? '<div class="recipe-detail-media" style="--swatch:' + escapeAttr(recipe.color || PALETTE[0]) + '"><img src="' + escapeAttr(thumbnail) + '" alt="' + escapeAttr(recipe.title) + '" decoding="async" referrerpolicy="no-referrer"></div>' : '<div class="recipe-detail-media recipe-detail-media-empty" style="--swatch:' + escapeAttr(recipe.color || PALETTE[0]) + '" aria-label="画像未設定"><span aria-hidden="true">🍳</span><small>画像未設定</small></div>';
     return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a></div><div class="heading-actions"><a class="button" href="#/recipes/' + escapeAttr(id) + '/edit">編集</a><button class="button button-danger" type="button" data-action="delete-recipe" data-id="' + escapeAttr(id) + '">削除</button></div></div>' +
-      '<div class="detail-layout"><div><section class="panel detail-hero"><div class="tag-list"><span class="pill">' + escapeHTML(recipe.category || '未分類') + '</span>' + (recipe.tags || []).map(function (tag) { return '<span class="pill">' + escapeHTML(tag) + '</span>'; }).join('') + '</div><h1>' + escapeHTML(recipe.title) + '</h1><p class="detail-description">' + escapeHTML(recipe.description || 'このレシピにはまだ説明がありません。') + '</p><div class="detail-actions"><button class="button button-primary" type="button" data-action="open-add-meal" data-recipe-id="' + escapeAttr(id) + '">献立に追加</button><a class="button" href="#/recipes/' + escapeAttr(id) + '/cook">調理モードを開始</a>' + (recipe.sourceUrl ? '<a class="button button-quiet" target="_blank" rel="noreferrer" href="' + escapeAttr(recipe.sourceUrl) + '">元ページを開く ↗</a>' : '') + '</div><div class="detail-stats"><div class="detail-stat"><small>調理時間</small><strong>' + escapeHTML(timeLabel(recipe)) + '</strong></div><div class="detail-stat"><small>元の人数</small><strong>' + escapeHTML(recipe.originalServings + '人前') + '</strong></div><div class="detail-stat"><small>評価</small><strong class="rating">' + (average ? '★ ' + average.toFixed(1) : '☆ —') + '</strong></div><div class="detail-stat"><small>お気に入り</small><strong><button class="favorite-button ' + (recipe.favorite ? 'is-favorite' : '') + '" type="button" data-action="favorite" data-id="' + escapeAttr(id) + '" aria-label="お気に入り">' + (recipe.favorite ? '★' : '☆') + '</button></strong></div></div></section>' +
+      '<div class="detail-layout"><div><section class="panel detail-hero"><div class="detail-hero-layout">' + detailImage + '<div class="detail-hero-copy"><div class="tag-list"><span class="pill">' + escapeHTML(recipe.category || '未分類') + '</span>' + (recipe.tags || []).map(function (tag) { return '<span class="pill">' + escapeHTML(tag) + '</span>'; }).join('') + '</div><h1>' + escapeHTML(recipe.title) + '</h1><p class="detail-description">' + escapeHTML(recipe.description || 'このレシピにはまだ説明がありません。') + '</p><div class="detail-actions"><button class="button button-primary" type="button" data-action="open-add-meal" data-recipe-id="' + escapeAttr(id) + '">献立に追加</button><a class="button" href="#/recipes/' + escapeAttr(id) + '/cook">調理モードを開始</a>' + (recipe.sourceUrl ? '<a class="button button-quiet" target="_blank" rel="noreferrer" href="' + escapeAttr(recipe.sourceUrl) + '">元ページを開く ↗</a>' : '') + '</div></div></div><div class="detail-stats"><div class="detail-stat"><small>調理時間</small><strong>' + escapeHTML(timeLabel(recipe)) + '</strong></div><div class="detail-stat"><small>元の人数</small><strong>' + escapeHTML(recipe.originalServings + '人前') + '</strong></div><div class="detail-stat"><small>評価</small><strong class="rating">' + (average ? '★ ' + average.toFixed(1) : '☆ —') + '</strong></div><div class="detail-stat"><small>お気に入り</small><strong><button class="favorite-button ' + (recipe.favorite ? 'is-favorite' : '') + '" type="button" data-action="favorite" data-id="' + escapeAttr(id) + '" aria-label="お気に入り">' + (recipe.favorite ? '★' : '☆') + '</button></strong></div></div></section>' +
       '<section class="panel detail-section"><div class="section-heading"><div><h2>材料</h2><p>人数に合わせて数量を計算表示しています。元データは変わりません。</p></div><div class="servings-control"><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="-1" aria-label="人数を減らす">−</button><output>' + escapeHTML(servings) + '人前</output><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="1" aria-label="人数を増やす">＋</button></div></div><ul class="ingredient-list">' + ingredientRows + '</ul></section>' +
       '<section class="panel detail-section"><div class="section-heading"><h2>作り方</h2></div><ol class="step-list">' + stepRows + '</ol></section></div>' +
       '<aside class="side-stack"><section class="panel"><div class="section-heading"><div><h3>調理履歴</h3><p>作った記録がここに残ります。</p></div></div><div class="history-stat-grid"><div class="history-stat"><strong>' + history.length + '</strong><small>調理回数</small></div><div class="history-stat"><strong>' + (lastCooked(id) ? formatDate(lastCooked(id)) : '—') + '</strong><small>最終調理</small></div><div class="history-stat"><strong>' + (average ? average.toFixed(1) : '—') + '</strong><small>平均評価</small></div></div>' + (historyRows ? '<div class="history-list" style="margin-top:14px">' + historyRows + '</div>' : '<p class="field-note" style="margin-top:16px">まだ調理履歴はありません。</p>') + '</section><section class="panel"><h3 style="margin:0 0 13px;font-size:14px">レシピ情報</h3><p class="field-note">登録日：' + escapeHTML(formatDate(String(recipe.createdAt).slice(0, 10))) + '</p><p class="field-note">更新日：' + escapeHTML(formatDate(String(recipe.updatedAt).slice(0, 10))) + '</p><p class="field-note">登録方法：' + (recipe.sourceType === 'json_ld' ? 'JSON-LDインポート' : recipe.sourceType === 'web' ? 'URL登録' : '手動入力') + '</p></section></aside></div>';
@@ -1533,6 +1583,7 @@
     draft.prepTimeMinutes = Math.max(0, Number(formData.get('prepTimeMinutes') || 0));
     draft.cookTimeMinutes = Math.max(0, Number(formData.get('cookTimeMinutes') || 0));
     draft.sourceUrl = String(formData.get('sourceUrl') || '').trim();
+    draft.thumbnailUrl = String(formData.get('thumbnailUrl') || '').trim();
     draft.tags = String(formData.get('tags') || '').split(',').map(function (tag) { return tag.trim(); }).filter(Boolean);
     draft.ingredients = Array.from(form.querySelectorAll('[data-ingredient-row]')).map(function (row) {
       var name = row.querySelector('[name^="ingredient-name-"]').value.trim();
@@ -2071,6 +2122,7 @@
       cookTimeMinutes: parseDuration(payload.cookTime) || parseDuration(payload.totalTime),
       sourceType: 'json_ld',
       sourceUrl: sourceUrl || payload.url || '',
+      thumbnailUrl: firstRecipeImage(payload.image),
       favorite: false,
       category: payload.recipeCategory && /soup|汁/i.test(String(payload.recipeCategory)) ? '汁物' : '主菜',
       tags: Array.isArray(payload.keywords) ? payload.keywords : String(payload.keywords || '').split(',').map(function (tag) { return tag.trim(); }).filter(Boolean),
