@@ -16,6 +16,31 @@
   ];
   var SHOPPING_CATEGORIES = ['野菜', '肉・魚', '冷蔵', '調味料', '乾物', '飲料', 'その他'];
   var PALETTE = ['#bc7652', '#668d68', '#c49745', '#6d83a5', '#a36a83', '#7d9561', '#b47e51', '#657e79'];
+  var SHOPPING_UNIT_PROFILES = {
+    'キャベツ': { unit: '個', fromUnits: { '個': 1, '枚': 1 / 16, 'g': 1 / 1000, 'kg': 1 } },
+    '玉ねぎ': { unit: '個', fromUnits: { '個': 1, 'g': 1 / 200, 'kg': 5 } },
+    'ピーマン': { unit: '個', fromUnits: { '個': 1, 'g': 1 / 40, 'kg': 25 } },
+    'にんじん': { unit: '本', fromUnits: { '本': 1, '個': 1, 'g': 1 / 150, 'kg': 20 } },
+    'じゃがいも': { unit: '個', fromUnits: { '個': 1, 'g': 1 / 150, 'kg': 20 } },
+    '長ねぎ': { unit: '本', fromUnits: { '本': 1, '個': 1, 'g': 1 / 100, 'kg': 10 } },
+    'にんにく': { unit: '片', fromUnits: { '片': 1, 'g': 1 / 10, 'kg': 100 } },
+    'もやし': { unit: '袋', fromUnits: { '袋': 1, 'g': 1 / 200, 'kg': 5 } },
+    '水菜': { unit: '束', fromUnits: { '束': 1, 'g': 1 / 200, 'kg': 5 } },
+    'にら': { unit: '束', fromUnits: { '束': 1, 'g': 1 / 100, 'kg': 10 } },
+    'ごぼう': { unit: '本', fromUnits: { '本': 1, '個': 1, 'g': 1 / 150, 'kg': 20 } },
+    '大根': { unit: '本', fromUnits: { '本': 1, '個': 1, 'g': 1 / 1000, 'kg': 1 } },
+    'こんにゃく': { unit: '袋', fromUnits: { '袋': 1, '枚': 1, 'g': 1 / 250, 'kg': 4 } },
+    '生姜': { unit: '片', fromUnits: { '片': 1, 'g': 1 / 10, 'kg': 100 } },
+    'マッシュルーム': { unit: 'パック', fromUnits: { 'パック': 1, 'g': 1 / 100, 'kg': 10 } },
+    'しめじ': { unit: 'パック', fromUnits: { 'パック': 1, 'g': 1 / 100, 'kg': 10 } },
+    'エリンギ': { unit: 'パック', fromUnits: { 'パック': 1, 'g': 1 / 100, 'kg': 10 } },
+    '小ねぎ': { unit: '束', fromUnits: { '束': 1, 'g': 1 / 30, 'kg': 100 / 3 } },
+    'しいたけ': { unit: '個', fromUnits: { '個': 1, 'g': 1 / 20, 'kg': 50 } },
+    '三つ葉': { unit: '束', fromUnits: { '束': 1, 'g': 1 / 20, 'kg': 50 } },
+    'レモン': { unit: '個', fromUnits: { '個': 1, 'g': 1 / 100, 'kg': 10 } }
+  };
+  var SHOPPING_MASS_UNITS = { 'g': { unit: 'g', factor: 1 }, 'kg': { unit: 'g', factor: 1000 } };
+  var SHOPPING_VOLUME_UNITS = { 'ml': { unit: 'ml', factor: 1 }, 'l': { unit: 'ml', factor: 1000 } };
   var view = document.getElementById('view');
   var modal = document.getElementById('modal');
   var toast = document.getElementById('toast');
@@ -43,6 +68,7 @@
     importDraft: null,
     importError: '',
     urlFallback: null,
+    shoppingRecipeSelectionOpen: false,
     cookSessions: {},
     pendingImport: null,
     dataError: ''
@@ -81,6 +107,30 @@
     if (value == null || value === '') return '';
     var rounded = Math.round(Number(value) * 100) / 100;
     return String(rounded).replace('.0', '');
+  }
+
+  function formatShoppingQuantity(value) {
+    if (value == null || value === '') return '';
+    var rounded = Math.round(Number(value) * 100) / 100;
+    var whole = Math.floor(rounded);
+    var fraction = Math.round((rounded - whole) * 100) / 100;
+    var fractions = [
+      { value: 0.125, label: '1/8' },
+      { value: 1 / 6, label: '1/6' },
+      { value: 0.2, label: '1/5' },
+      { value: 0.25, label: '1/4' },
+      { value: 1 / 3, label: '1/3' },
+      { value: 0.375, label: '3/8' },
+      { value: 0.5, label: '1/2' },
+      { value: 0.625, label: '5/8' },
+      { value: 2 / 3, label: '2/3' },
+      { value: 0.75, label: '3/4' },
+      { value: 0.8, label: '4/5' },
+      { value: 0.875, label: '7/8' }
+    ];
+    var match = fractions.find(function (item) { return Math.abs(fraction - item.value) < 0.01; });
+    if (match) return (whole ? whole + ' ' : '') + match.label;
+    return formatQuantity(rounded);
   }
 
   function formatDate(iso, includeWeekday) {
@@ -1009,9 +1059,51 @@
     return formatQuantity(quantity) + (item.unit ? ' ' + item.unit : '') + ' ' + item.displayName;
   }
 
+  function shoppingUnitProfileFor(item) {
+    var name = normalize(item && (item.displayName || item.canonicalName));
+    return SHOPPING_UNIT_PROFILES[name] || null;
+  }
+
   function categoryForIngredient(item) {
     var master = masterById(item.ingredientId);
+    if (master && master.category && master.category !== 'その他') return master.category;
+    if (shoppingUnitProfileFor(item)) return '野菜';
+    if (/(肉|ひき肉|鶏|豚|牛|魚|鮭|鯖|サバ|えび|エビ|海老|いか|イカ|たこ|タコ|貝|牡蠣|カキ)/i.test(String(item.displayName || ''))) return '肉・魚';
     return master ? master.category : 'その他';
+  }
+
+  function normalizeShoppingQuantity(item, category) {
+    var quantity = item.quantity == null ? null : Number(item.quantity);
+    if (!Number.isFinite(quantity)) quantity = null;
+    var unit = String(item.unit || '').trim();
+    var unitKey = normalize(unit);
+    var profile = shoppingUnitProfileFor(item);
+    if (profile && quantity != null && Object.prototype.hasOwnProperty.call(profile.fromUnits, unitKey)) {
+      return { quantity: quantity * profile.fromUnits[unitKey], unit: profile.unit, originalText: item.originalText || item.displayName };
+    }
+    if (category === '肉・魚' && quantity != null && Object.prototype.hasOwnProperty.call(SHOPPING_MASS_UNITS, unitKey)) {
+      return { quantity: quantity * SHOPPING_MASS_UNITS[unitKey].factor, unit: 'g', originalText: item.originalText || item.displayName };
+    }
+    if (quantity != null && Object.prototype.hasOwnProperty.call(SHOPPING_MASS_UNITS, unitKey)) {
+      return { quantity: quantity * SHOPPING_MASS_UNITS[unitKey].factor, unit: 'g', originalText: item.originalText || item.displayName };
+    }
+    if (quantity != null && Object.prototype.hasOwnProperty.call(SHOPPING_VOLUME_UNITS, unitKey)) {
+      return { quantity: quantity * SHOPPING_VOLUME_UNITS[unitKey].factor, unit: 'ml', originalText: item.originalText || item.displayName };
+    }
+    return { quantity: quantity, unit: unit, originalText: item.originalText || item.displayName };
+  }
+
+  function mergeShoppingQuantity(item, next) {
+    var currentParts = Array.isArray(item.quantityParts) && item.quantityParts.length ? item.quantityParts : [{ quantity: item.quantity, unit: item.unit || '', originalText: item.originalText || item.displayName }];
+    var sameUnit = normalize(item.unit || '') === normalize(next.unit || '');
+    if (item.quantity != null && next.quantity != null && sameUnit) {
+      item.quantity += next.quantity;
+      item.quantityParts = currentParts.concat([next]);
+      return;
+    }
+    item.quantity = null;
+    item.unit = '';
+    item.quantityParts = currentParts.concat([next]);
   }
 
   function allTags() {
@@ -1316,7 +1408,14 @@
   }
 
   function shoppingItemLabel(item) {
-    return item.quantity == null ? (item.originalText || item.displayName) : formatQuantity(item.quantity) + (item.unit ? ' ' + item.unit : '');
+    if (item.quantity != null) return formatShoppingQuantity(item.quantity) + (item.unit ? ' ' + item.unit : '');
+    if (Array.isArray(item.quantityParts) && item.quantityParts.length) {
+      return item.quantityParts.map(function (part) {
+        if (part.quantity == null) return part.originalText || item.displayName;
+        return formatShoppingQuantity(part.quantity) + (part.unit ? ' ' + part.unit : '');
+      }).join(' + ');
+    }
+    return item.originalText || item.displayName;
   }
 
   function renderShopping() {
@@ -1505,13 +1604,13 @@
   function renderShoppingRecipeSelection(list) {
     var recipes = shoppingRecipeIds(list).map(recipeById).filter(function (recipe) { return recipe && !recipe.deletedAt; });
     if (!recipes.length) return '';
-    return '<details class="shopping-recipe-selection"><summary><span><strong>選択中のレシピ</strong><small>買い物リストに反映中</small></span><span class="pill">' + recipes.length + '件</span></summary><div class="shopping-recipe-chips">' + recipes.map(function (recipe) {
+    return '<details class="shopping-recipe-selection" data-shopping-recipe-selection' + (ui.shoppingRecipeSelectionOpen ? ' open' : '') + '><summary><span><strong>選択中のレシピ</strong><small>買い物リストに反映中</small></span><span class="pill">' + recipes.length + '件</span></summary><div class="shopping-recipe-chips">' + recipes.map(function (recipe) {
       return '<span class="shopping-recipe-chip"><a href="#/recipes/' + escapeAttr(recipe.id) + '">' + escapeHTML(recipe.title) + '</a><button class="text-button danger" type="button" data-action="remove-shopping-recipe" data-list-id="' + escapeAttr(list.id) + '" data-recipe-id="' + escapeAttr(recipe.id) + '" aria-label="' + escapeAttr(recipe.title) + 'を買い物リストから外す">×</button></span>';
     }).join('') + '</div></details>';
   }
 
   function ingredientAggregationKey(item) {
-    return (item.ingredientId || 'custom-' + normalize(item.displayName)) + '|' + normalize(item.unit || '');
+    return item.ingredientId || 'custom-' + normalize(item.displayName);
   }
 
   function syncShoppingListForDate(date) {
@@ -1555,13 +1654,15 @@
         var key = ingredientAggregationKey(ingredient);
         var quantity = ingredient.quantity == null ? null : Number(ingredient.quantity) * (Number(meal.servings || recipe.originalServings) / Number(recipe.originalServings || 1));
         var category = categoryForIngredient(ingredient);
+        var shoppingQuantity = normalizeShoppingQuantity({ quantity: quantity, unit: ingredient.unit, originalText: ingredient.originalText, displayName: ingredient.displayName }, category);
         if (!grouped[key]) {
           grouped[key] = {
             id: uid('shop'),
             ingredientId: ingredient.ingredientId,
             displayName: ingredient.displayName,
-            quantity: quantity,
-            unit: ingredient.unit || '',
+            quantity: shoppingQuantity.quantity,
+            unit: shoppingQuantity.unit,
+            quantityParts: [shoppingQuantity],
             originalText: ingredient.originalText || ingredient.displayName,
             category: category,
             checked: false,
@@ -1574,7 +1675,7 @@
             deletedAt: null
           };
         } else {
-          if (grouped[key].quantity != null && quantity != null) grouped[key].quantity += quantity;
+          mergeShoppingQuantity(grouped[key], shoppingQuantity);
           if (grouped[key].sourceRecipes.indexOf(recipe.title) === -1) grouped[key].sourceRecipes.push(recipe.title);
           if (grouped[key].sourceRecipeIds.indexOf(recipe.id) === -1) grouped[key].sourceRecipeIds.push(recipe.id);
         }
@@ -1613,6 +1714,7 @@
       makeShoppingList(list.periodStart, list.periodEnd, remainingRecipeIds, { silent: true });
       return;
     }
+    ui.shoppingRecipeSelectionOpen = false;
     var removedAt = nowISO();
     (list.items || []).forEach(function (item) {
       if (!item.manualItem && !item.deletedAt) {
@@ -1932,7 +2034,7 @@
        var deviceId = state.sync.deviceId;
        state = normalizeState(createSeedState());
        state.sync.deviceId = deviceId;
-       ui = { search: '', category: 'すべて', tag: 'すべて', favoriteOnly: false, maxTime: '', sort: 'recent', formDraft: {}, weekOffset: 0, selectionMode: false, selectedRecipes: {}, shoppingView: 'category', importDraft: null, importError: '', urlFallback: null, cookSessions: {}, pendingImport: null, dataError: '' };
+       ui = { search: '', category: 'すべて', tag: 'すべて', favoriteOnly: false, maxTime: '', sort: 'recent', formDraft: {}, weekOffset: 0, selectionMode: false, selectedRecipes: {}, shoppingView: 'category', importDraft: null, importError: '', urlFallback: null, shoppingRecipeSelectionOpen: false, cookSessions: {}, pendingImport: null, dataError: '' };
       saveState();
       showToast('サンプルデータを再読み込みしました。');
       location.hash = '#/recipes';
@@ -1955,6 +2057,11 @@
     }
     if (action === 'clear-import') { ui.importDraft = null; ui.importError = ''; ui.urlFallback = null; location.hash = '#/recipes/import'; return; }
   }
+
+  document.addEventListener('toggle', function (event) {
+    var details = event.target;
+    if (details && details.matches && details.matches('[data-shopping-recipe-selection]')) ui.shoppingRecipeSelectionOpen = details.open;
+  }, true);
 
   document.addEventListener('click', handleClick);
 

@@ -394,6 +394,8 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
   .recipe-row { grid-template-columns: 1fr 30px; gap: 7px; min-height: 69px; padding: 10px 4px; border-bottom: 1px solid var(--border); }
   .recipe-list.selection-list .recipe-row { grid-template-columns: 52px 1fr 30px; }
   .recipe-row > :nth-child(2), .recipe-row > :nth-child(3), .recipe-row > :nth-child(4), .recipe-row > :nth-child(5) { display: none; }
+  .recipe-list.selection-list .recipe-row > :nth-child(2) { display: flex; }
+  .recipe-list.selection-list .recipe-row > :nth-child(6) { display: none; }
   .recipe-row .recipe-main { gap: 10px; }
   .recipe-swatch { width: 37px; height: 37px; flex-basis: 37px; }
   .recipe-title { font-size: 12px; }
