@@ -1,9 +1,9 @@
-const CACHE_NAME = 'meal-note-shell-v18';
+const CACHE_NAME = 'meal-note-shell-v24';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=17',
-  './app.js?v=17',
+  './styles.css?v=21',
+  './app.js?v=22',
   './manifest.webmanifest',
   './app-config.js',
   './app-icon-192.png',
@@ -28,6 +28,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   if (new URL(event.request.url).pathname.endsWith('/app-config.js')) {
     event.respondWith(fetch(event.request).then((response) => {
       const copy = response.clone();

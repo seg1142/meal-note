@@ -47,7 +47,8 @@ originalText を材料ごとに保持し、数値数量だけを献立人数に�
 - Shopping check/uncheck, edit, manual add, exclude, delete, category/recipe view
 - Full-screen-style Cooking Mode with ingredient check, step progress, Wake Lock fallback
 - Cooking history with rating and note
-- JSON-LD Recipe detection → review → save
+- URL-first recipe import: public Recipe JSON-LD pages can be imported with ingredients, steps, times, and thumbnail; review remains available when needed
+- Gemini-assisted import bridge: copy a structured prompt for a YouTube URL, paste Gemini's JSON response, and import ingredients / steps / metadata without an API key in Meal Note
 - Web App Manifest and application-shell service worker
 - PWA icon uses the supplied `app-icon-192.png` / `app-icon-512.png` assets
 - Data Management: local JSON export/import/share and an automatic local snapshot before restore/sync
@@ -57,8 +58,8 @@ originalText を材料ごとに保持し、数値数量だけを献立人数に�
 ### Deferred / Known Limitations
 
 - localStorage は単一ブラウザ・単一ユーザー向けです。PostgreSQL/ORM へ差し替える repository boundary は用意していますが、DB provider は未固定です。
-- URL import はブラウザの CORS 制約を受けます。取得できないサイトは JSON-LD / HTML の貼り付けでレビューできます。
-- 画像は外部URLの取り込み・保存をまだ行わず、カード表示は画像なしでも成立する表示にしています。
+- URL import はブラウザの CORS 制約を受けます。公開Recipe JSON-LDを持つレシピサイトはURLだけで自動登録できます。サイト側がCORSを許可していない場合は、JSON-LD / HTMLの貼り付け、またはURL情報の仮登録で続行できます。YouTubeはoEmbedでタイトル・サムネイルを自動取得できますが、動画音声から材料・工程を抽出する部分は、Meal Note内ではAPIを使わず、コピーしたプロンプトをGeminiへ貼り付け、その整形JSONをMeal Noteへ戻す方式にしています。
+- サムネイルは取得できた外部URLを参照して詳細画面に表示します。画像ファイル自体のローカル保存・ミラーリングはまだ行わず、画像なしでも表示できるようにしています。
 - Google Drive連携は将来機能として保持しています。現行運用ではGoogle Cloud設定やOAuth Client IDを不要とし、JSON Export / Import / Shareを主なバックアップ手段にします。再有効化する場合はGoogle CloudでWeb OAuth Client IDを作成し、`app-config.js` の `googleClientId` に設定します。Client Secretは作成してもリポジトリへ置かず、ブラウザへ配布しません。
 - Drive同期は手動実行です。リアルタイム同期、バックグラウンド同期、複数ユーザー、CRDT、AI機能は対象外です。
 

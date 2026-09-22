@@ -286,6 +286,12 @@ input[type="checkbox"] { width: 17px; min-height: 17px; accent-color: var(--acce
 .url-fallback { display: grid; gap: 17px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
 .url-fallback h2 { margin: 0; font-size: 15px; }
 .url-fallback p { max-width: 650px; margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.url-fallback > div { display: flex; align-items: center; gap: 13px; }
+.import-fallback-image { width: 64px; height: 64px; flex: 0 0 64px; object-fit: cover; border-radius: 12px; background: var(--surface-2); }
+.import-gemini-action { display: flex; align-items: center; flex-wrap: wrap; gap: 9px 12px; }
+.import-advanced { border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; }
+.import-advanced summary { padding: 12px 0; color: var(--muted); cursor: pointer; font-size: 11px; }
+.import-advanced .field { padding: 0 0 12px; }
 .data-error { margin-top: 14px; }
 .advanced-sync { overflow: hidden; }
 .advanced-sync summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 20px; cursor: pointer; list-style: none; }

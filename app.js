@@ -236,27 +236,57 @@
     return '';
   }
 
-  function safeImageUrl(value) {
+  function safeImageUrl(value, baseUrl) {
     var candidate = String(value || '').trim();
     if (!candidate) return '';
     try {
-      var parsed = new URL(candidate, location.href);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? candidate : '';
+      var parsed = new URL(candidate, baseUrl || location.href);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
     } catch (error) {
       return '';
     }
   }
 
-  function firstRecipeImage(value) {
+  function firstRecipeImage(value, baseUrl) {
     if (Array.isArray(value)) {
       for (var index = 0; index < value.length; index += 1) {
-        var found = firstRecipeImage(value[index]);
+        var found = firstRecipeImage(value[index], baseUrl);
         if (found) return found;
       }
       return '';
     }
-    if (value && typeof value === 'object') return firstRecipeImage(value.url || value.contentUrl || value.contentUrlTemplate || '');
-    return safeImageUrl(value);
+    if (value && typeof value === 'object') return firstRecipeImage(value.url || value.contentUrl || value.contentUrlTemplate || '', baseUrl);
+    return safeImageUrl(value, baseUrl);
+  }
+
+  function firstMetaContent(doc, selectors) {
+    for (var index = 0; index < selectors.length; index += 1) {
+      var element = doc.querySelector(selectors[index]);
+      var content = element && element.getAttribute('content');
+      if (content && content.trim()) return content.trim();
+    }
+    return '';
+  }
+
+  function extractPageMetadata(input, baseUrl) {
+    var text = String(input || '').trim();
+    if (!text || !window.DOMParser) return { title: '', description: '', thumbnailUrl: '' };
+    var doc = new DOMParser().parseFromString(text, 'text/html');
+    var titleElement = doc.querySelector('title');
+    var title = firstMetaContent(doc, [
+      'meta[property="og:title"]',
+      'meta[name="twitter:title"]'
+    ]) || (titleElement && titleElement.textContent ? titleElement.textContent.trim() : '');
+    var description = firstMetaContent(doc, [
+      'meta[property="og:description"]',
+      'meta[name="description"]',
+      'meta[name="twitter:description"]'
+    ]);
+    var thumbnailUrl = firstMetaContent(doc, [
+      'meta[property="og:image"]',
+      'meta[name="twitter:image"]'
+    ]);
+    return { title: title, description: description, thumbnailUrl: safeImageUrl(thumbnailUrl, baseUrl) };
   }
 
   function seedRecipe(id, title, category, tags, servings, prep, cook, ingredients, steps, favorite, color, description) {
@@ -1371,7 +1401,7 @@
       '<div class="detail-layout"><div><section class="panel detail-hero"><div class="detail-hero-layout">' + detailImage + '<div class="detail-hero-copy"><div class="tag-list"><span class="pill">' + escapeHTML(recipe.category || '未分類') + '</span>' + (recipe.tags || []).map(function (tag) { return '<span class="pill">' + escapeHTML(tag) + '</span>'; }).join('') + '</div><h1>' + escapeHTML(recipe.title) + '</h1><p class="detail-description">' + escapeHTML(recipe.description || 'このレシピにはまだ説明がありません。') + '</p><div class="detail-actions"><button class="button button-primary" type="button" data-action="open-add-meal" data-recipe-id="' + escapeAttr(id) + '">献立に追加</button><a class="button" href="#/recipes/' + escapeAttr(id) + '/cook">調理モードを開始</a>' + (recipe.sourceUrl ? '<a class="button button-quiet" target="_blank" rel="noreferrer" href="' + escapeAttr(recipe.sourceUrl) + '">元ページを開く ↗</a>' : '') + '</div></div></div><div class="detail-stats"><div class="detail-stat"><small>調理時間</small><strong>' + escapeHTML(timeLabel(recipe)) + '</strong></div><div class="detail-stat"><small>元の人数</small><strong>' + escapeHTML(recipe.originalServings + '人前') + '</strong></div><div class="detail-stat"><small>評価</small><strong class="rating">' + (average ? '★ ' + average.toFixed(1) : '☆ —') + '</strong></div><div class="detail-stat"><small>お気に入り</small><strong><button class="favorite-button ' + (recipe.favorite ? 'is-favorite' : '') + '" type="button" data-action="favorite" data-id="' + escapeAttr(id) + '" aria-label="お気に入り">' + (recipe.favorite ? '★' : '☆') + '</button></strong></div></div></section>' +
       '<section class="panel detail-section"><div class="section-heading"><div><h2>材料</h2><p>人数に合わせて数量を計算表示しています。元データは変わりません。</p></div><div class="servings-control"><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="-1" aria-label="人数を減らす">−</button><output>' + escapeHTML(servings) + '人前</output><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="1" aria-label="人数を増やす">＋</button></div></div><ul class="ingredient-list">' + ingredientRows + '</ul></section>' +
       '<section class="panel detail-section"><div class="section-heading"><h2>作り方</h2></div><ol class="step-list">' + stepRows + '</ol></section></div>' +
-      '<aside class="side-stack"><section class="panel"><div class="section-heading"><div><h3>調理履歴</h3><p>作った記録がここに残ります。</p></div></div><div class="history-stat-grid"><div class="history-stat"><strong>' + history.length + '</strong><small>調理回数</small></div><div class="history-stat"><strong>' + (lastCooked(id) ? formatDate(lastCooked(id)) : '—') + '</strong><small>最終調理</small></div><div class="history-stat"><strong>' + (average ? average.toFixed(1) : '—') + '</strong><small>平均評価</small></div></div>' + (historyRows ? '<div class="history-list" style="margin-top:14px">' + historyRows + '</div>' : '<p class="field-note" style="margin-top:16px">まだ調理履歴はありません。</p>') + '</section><section class="panel"><h3 style="margin:0 0 13px;font-size:14px">レシピ情報</h3><p class="field-note">登録日：' + escapeHTML(formatDate(String(recipe.createdAt).slice(0, 10))) + '</p><p class="field-note">更新日：' + escapeHTML(formatDate(String(recipe.updatedAt).slice(0, 10))) + '</p><p class="field-note">登録方法：' + (recipe.sourceType === 'json_ld' ? 'JSON-LDインポート' : recipe.sourceType === 'web' ? 'URL登録' : '手動入力') + '</p></section></aside></div>';
+      '<aside class="side-stack"><section class="panel"><div class="section-heading"><div><h3>調理履歴</h3><p>作った記録がここに残ります。</p></div></div><div class="history-stat-grid"><div class="history-stat"><strong>' + history.length + '</strong><small>調理回数</small></div><div class="history-stat"><strong>' + (lastCooked(id) ? formatDate(lastCooked(id)) : '—') + '</strong><small>最終調理</small></div><div class="history-stat"><strong>' + (average ? average.toFixed(1) : '—') + '</strong><small>平均評価</small></div></div>' + (historyRows ? '<div class="history-list" style="margin-top:14px">' + historyRows + '</div>' : '<p class="field-note" style="margin-top:16px">まだ調理履歴はありません。</p>') + '</section><section class="panel"><h3 style="margin:0 0 13px;font-size:14px">レシピ情報</h3><p class="field-note">登録日：' + escapeHTML(formatDate(String(recipe.createdAt).slice(0, 10))) + '</p><p class="field-note">更新日：' + escapeHTML(formatDate(String(recipe.updatedAt).slice(0, 10))) + '</p><p class="field-note">登録方法：' + (recipe.sourceType === 'json_ld' ? 'JSON-LDインポート' : recipe.sourceType === 'ai_json' ? 'Gemini JSONインポート' : recipe.sourceType === 'web' ? 'URL登録' : '手動入力') + '</p></section></aside></div>';
   }
 
   function mealsFor(date, slot) {
@@ -1504,8 +1534,12 @@
 
   function renderImportPage() {
     var fallback = ui.urlFallback;
-    var fallbackHtml = fallback ? '<section class="url-fallback"><div><h2>タイトルと備考だけで登録</h2><p>このURLからレシピ情報を自動取得できませんでした。タイトルと備考を保存し、材料・工程はあとから編集できます。</p></div><form class="form-layout" data-form="url-fallback" data-source-url="' + escapeAttr(fallback.sourceUrl) + '"><div class="field"><label for="fallback-title">タイトル</label><input id="fallback-title" name="title" value="' + escapeAttr(fallback.title || '') + '" placeholder="例：動画のレシピ名" required></div><div class="field"><label for="fallback-description">備考・メモ</label><textarea id="fallback-description" name="description" placeholder="材料や作り方のメモを貼り付けできます。">' + escapeHTML(fallback.description || '') + '</textarea></div><div class="form-actions"><button class="button button-primary" type="submit">URLと備考で保存</button><button class="button button-quiet" type="button" data-action="clear-import">キャンセル</button></div></form></section>' : '';
-    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URLから取り込む</h1><p>通常はURLを貼り付けるだけで解析し、保存前に内容を確認できます。</p></div></div><section class="panel form-panel"><div class="notice">外部サイトの読み込みはブラウザの CORS 制約を受けます。取得できない場合も、タイトルと備考だけでURLを登録できます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピページのURL</label><input id="import-url" name="url" type="url" value="' + escapeAttr(fallback ? fallback.sourceUrl : '') + '" placeholder="https://example.com/recipe"></div><div class="field"><label for="import-source">JSON-LD またはページHTML（任意）</label><textarea id="import-source" name="source" placeholder="通常は空欄のままで大丈夫です。必要な場合のみ貼り付けます。"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div><div class="form-actions"><button class="button button-primary" type="submit">解析してレビュー</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + fallbackHtml + '</section>';
+    var fallbackImage = fallback && safeImageUrl(fallback.thumbnailUrl) ? '<img class="import-fallback-image" src="' + escapeAttr(safeImageUrl(fallback.thumbnailUrl)) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '';
+    var fallbackHint = fallback && isYouTubeUrl(fallback.sourceUrl)
+      ? 'YouTubeからはタイトルとサムネイルを自動取得しました。動画の説明欄に材料がない場合、材料・工程はレシピ詳細から追加できます。'
+      : 'このURLから材料・工程を自動取得できませんでした。取得できたタイトル・説明・画像を使って、URLを先に登録できます。';
+    var fallbackHtml = fallback ? '<section class="url-fallback"><div>' + fallbackImage + '<div><h2>URL情報で登録</h2><p>' + escapeHTML(fallbackHint) + '</p></div></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt" data-prompt-url="' + escapeAttr(fallback.sourceUrl) + '">Gemini用プロンプトをコピー</button><span class="field-note">動画をGeminiで要約した回答を、下の貼り付け欄へ戻して登録できます。</span></div><form class="form-layout" data-form="url-fallback" data-source-url="' + escapeAttr(fallback.sourceUrl) + '" data-thumbnail-url="' + escapeAttr(fallback.thumbnailUrl || '') + '"><div class="field"><label for="fallback-title">タイトル</label><input id="fallback-title" name="title" value="' + escapeAttr(fallback.title || '') + '" placeholder="例：動画のレシピ名" required></div><div class="field"><label for="fallback-description">備考・材料メモ（任意）</label><textarea id="fallback-description" name="description" placeholder="動画の説明欄や、あとで確認したいメモを貼り付けできます。">' + escapeHTML(fallback.description || '') + '</textarea></div><div class="form-actions"><button class="button button-primary" type="submit">このURL情報で登録</button><button class="button button-quiet" type="button" data-action="clear-import">キャンセル</button></div></form></section>' : '';
+    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URLだけでレシピ登録</h1><p>レシピサイトのリンクを貼り付けるだけで、材料・工程・サムネイルを自動入力します。</p></div></div><section class="panel form-panel"><div class="notice">レシピサイトはRecipe JSON-LDが公開されていれば、内容をまとめて取り込めます。YouTubeはGeminiに動画を要約させたJSONを貼り付けると、材料・工程までまとめて登録できます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピサイト／YouTubeのURL</label><input id="import-url" name="url" type="url" inputmode="url" autocomplete="url" value="' + escapeAttr(fallback ? fallback.sourceUrl : '') + '" placeholder="https://..."><span class="field-note">Geminiの回答に元URLが含まれていれば、URL欄を空欄にして回答だけ貼り付けることもできます。</span></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt">Gemini用プロンプトをコピー</button><span class="field-note">主にYouTube向け。コピー後、動画ページやGeminiで貼り付けてください。</span></div><details class="import-advanced"><summary>Geminiの回答／JSON-LD／HTMLを貼り付ける</summary><div class="field"><label for="import-source">Geminiの回答またはJSON-LD／ページHTML</label><textarea id="import-source" name="source" placeholder="Geminiの回答は、指定されたJSONだけを貼り付けてください。```json の囲みも解析できます。"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div></details><div class="form-actions"><button class="button button-primary" type="submit" name="mode" value="auto">URLだけで登録</button><button class="button button-quiet" type="submit" name="mode" value="review">内容を確認して登録</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + fallbackHtml + '</section>';
   }
 
   function renderImportReview() {
@@ -1514,7 +1548,8 @@
     var steps = draft.steps || [];
     var ingredientText = ingredients.map(function (item) { return item.originalText || item.displayName; }).join('\n');
     var stepText = steps.map(function (item) { return item.instruction; }).join('\n');
-    return '<div class="page-heading"><div><a class="link" href="#/recipes/import">← インポート入力へ戻る</a><p class="eyebrow" style="margin-top:15px">Review before save</p><h1>取り込み内容を確認</h1><p>自動保存はされません。内容を整えてから保存してください。</p></div><div class="heading-actions"><button class="button" type="button" data-action="clear-import">破棄</button></div></div><section class="panel form-panel"><div class="notice">取得元：' + escapeHTML(draft.sourceUrl || '貼り付けデータ') + '<br>Recipe JSON-LD として検出しました。</div><form class="form-layout" data-form="import-review" style="margin-top:17px"><div class="import-review"><div class="form-grid"><div class="field full"><label for="review-title">レシピ名</label><input id="review-title" name="title" value="' + escapeAttr(draft.title) + '" required></div><div class="field full"><label for="review-description">説明</label><textarea id="review-description" name="description">' + escapeHTML(draft.description || '') + '</textarea></div><div class="field"><label for="review-category">カテゴリ</label><select id="review-category" name="category">' + selectOptions(['主菜', '副菜', '主食', '汁物', 'おつまみ'], draft.category || '主菜', false) + '</select></div><div class="field"><label for="review-servings">元の人数</label><input id="review-servings" name="originalServings" type="number" min="1" value="' + escapeAttr(draft.originalServings || 2) + '"></div><div class="field"><label for="review-prep">下準備（分）</label><input id="review-prep" name="prepTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.prepTimeMinutes || 0) + '"></div><div class="field"><label for="review-cook">調理（分）</label><input id="review-cook" name="cookTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.cookTimeMinutes || 0) + '"></div><div class="field full"><label for="review-tags">タグ（カンマ区切り）</label><input id="review-tags" name="tags" value="' + escapeAttr((draft.tags || []).join(', ')) + '"></div></div><div class="field"><label for="review-ingredients">材料（1行1材料）</label><textarea id="review-ingredients" name="ingredients" required>' + escapeHTML(ingredientText) + '</textarea><label for="review-steps" style="margin-top:12px">工程（1行1工程）</label><textarea id="review-steps" name="steps" required>' + escapeHTML(stepText) + '</textarea></div></div><div class="form-actions"><button class="button button-primary" type="submit">確認して保存</button></div></form></section>';
+    var importLabel = draft.sourceType === 'ai_json' ? 'Gemini整形JSON' : 'Recipe JSON-LD';
+    return '<div class="page-heading"><div><a class="link" href="#/recipes/import">← インポート入力へ戻る</a><p class="eyebrow" style="margin-top:15px">Review before save</p><h1>取り込み内容を確認</h1><p>自動保存はされません。内容を整えてから保存してください。</p></div><div class="heading-actions"><button class="button" type="button" data-action="clear-import">破棄</button></div></div><section class="panel form-panel"><div class="notice">取得元：' + escapeHTML(draft.sourceUrl || '貼り付けデータ') + '<br>' + importLabel + 'として検出しました。</div><form class="form-layout" data-form="import-review" style="margin-top:17px"><div class="import-review"><div class="form-grid"><div class="field full"><label for="review-title">レシピ名</label><input id="review-title" name="title" value="' + escapeAttr(draft.title) + '" required></div><div class="field full"><label for="review-description">説明</label><textarea id="review-description" name="description">' + escapeHTML(draft.description || '') + '</textarea></div><div class="field"><label for="review-category">カテゴリ</label><select id="review-category" name="category">' + selectOptions(['主菜', '副菜', '主食', '汁物', 'おつまみ'], draft.category || '主菜', false) + '</select></div><div class="field"><label for="review-servings">元の人数</label><input id="review-servings" name="originalServings" type="number" min="1" value="' + escapeAttr(draft.originalServings || 2) + '"></div><div class="field"><label for="review-prep">下準備（分）</label><input id="review-prep" name="prepTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.prepTimeMinutes || 0) + '"></div><div class="field"><label for="review-cook">調理（分）</label><input id="review-cook" name="cookTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.cookTimeMinutes || 0) + '"></div><div class="field full"><label for="review-tags">タグ（カンマ区切り）</label><input id="review-tags" name="tags" value="' + escapeAttr((draft.tags || []).join(', ')) + '"></div></div><div class="field"><label for="review-ingredients">材料（1行1材料）</label><textarea id="review-ingredients" name="ingredients" required>' + escapeHTML(ingredientText) + '</textarea><label for="review-steps" style="margin-top:12px">工程（1行1工程）</label><textarea id="review-steps" name="steps" required>' + escapeHTML(stepText) + '</textarea></div></div><div class="form-actions"><button class="button button-primary" type="submit">確認して保存</button></div></form></section>';
   }
 
   function cookSessionFor(id, recipe) {
@@ -1770,14 +1805,14 @@
       if (!draft.color) draft.color = PALETTE[state.recipes.length % PALETTE.length];
       state.recipes.unshift(draft);
     }
-    if (isNew && draft.sourceType === 'json_ld') {
+    if (isNew && (draft.sourceType === 'json_ld' || draft.sourceType === 'ai_json')) {
       state.importSources.push({
         id: uid('import'),
         recipeId: draft.id,
         type: 'web',
         url: draft.sourceUrl || '',
         originalTitle: draft.title,
-        importMethod: 'json_ld',
+        importMethod: draft.sourceType === 'ai_json' ? 'gemini_json' : 'json_ld',
         rawMetadata: draft.rawMetadata || null,
          createdAt: nowISO(),
          updatedAt: nowISO(),
@@ -1794,10 +1829,74 @@
     return draft;
   }
 
+  function geminiPromptForUrl(sourceUrl) {
+    var url = String(sourceUrl || '').trim();
+    return [
+      'あなたは料理動画・レシピページの内容を整理するアシスタントです。以下のURLを確認し、料理名、材料、作り方、人数、調理時間を抽出してください。',
+      '動画の場合は、動画の内容・説明欄・表示される材料を優先し、確認できない情報は推測せず null または空配列にしてください。',
+      '',
+      '対象URL:',
+      url,
+      '',
+      '返答は説明文やMarkdownを付けず、次のJSONオブジェクトだけにしてください。```json の囲みも不要です。',
+      '{',
+      '  "sourceUrl": ' + JSON.stringify(url) + ',',
+      '  "title": "料理名",',
+      '  "description": "料理の特徴や保存メモ",',
+      '  "category": "主菜",',
+      '  "tags": ["YouTube"],',
+      '  "servings": 2,',
+      '  "prepTimeMinutes": 10,',
+      '  "cookTimeMinutes": 20,',
+      '  "thumbnailUrl": null,',
+      '  "ingredients": [',
+      '    {"name": "豚こま切れ肉", "quantity": 200, "unit": "g", "note": "", "optional": false}',
+      '  ],',
+      '  "steps": ["工程1", "工程2"]',
+      '}',
+      '',
+      '材料のquantityは数値またはnull、unitは g・kg・個・本・枚・束・大さじ・小さじなどを使ってください。材料名、分量、単位が動画から確認できない場合は無理に補完しないでください。'
+    ].join('\n');
+  }
+
+  function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }).catch(function () { return copyTextWithSelection(text); });
+    }
+    return Promise.resolve(copyTextWithSelection(text));
+  }
+
+  function copyTextWithSelection(text) {
+    var helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', '');
+    helper.style.position = 'fixed';
+    helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+    document.body.removeChild(helper);
+    return copied;
+  }
+
   function handleClick(event) {
     var target = event.target.closest('[data-action]');
     if (!target) return;
     var action = target.dataset.action;
+    if (action === 'copy-gemini-prompt') {
+      var importUrlInput = document.getElementById('import-url');
+      var promptUrl = String(target.dataset.promptUrl || (importUrlInput && importUrlInput.value) || '').trim();
+      if (!promptUrl) {
+        showToast('先にYouTubeまたはレシピページのURLを入力してください。');
+        if (importUrlInput) importUrlInput.focus();
+        return;
+      }
+      copyTextToClipboard(geminiPromptForUrl(promptUrl)).then(function (copied) {
+        showToast(copied ? 'Gemini用プロンプトをコピーしました。' : 'コピーできませんでした。プロンプトを手動で選択してください。');
+      });
+      return;
+    }
     if (action === 'download-data') {
       downloadJSON('meal-note-' + dataTimestamp() + '.json', buildSyncSnapshot());
       showToast('JSONを書き出しました。');
@@ -2182,7 +2281,7 @@
         cookTimeMinutes: 0,
         sourceType: 'web',
         sourceUrl: fallbackUrl,
-        thumbnailUrl: thumbnailUrlForSource(fallbackUrl),
+        thumbnailUrl: String(form.dataset.thumbnailUrl || '').trim() || thumbnailUrlForSource(fallbackUrl),
         favorite: false,
         category: '主菜',
         tags: ['URL登録'],
@@ -2304,6 +2403,128 @@
     return null;
   }
 
+  function parseJsonCandidate(input) {
+    var text = String(input || '').trim();
+    if (!text) return null;
+    var candidates = [text];
+    var fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced) candidates.unshift(fenced[1].trim());
+    for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
+      try { return JSON.parse(candidates[candidateIndex]); } catch (error) { /* continue with balanced extraction */ }
+    }
+    for (var start = 0; start < text.length; start += 1) {
+      if (text[start] !== '{' && text[start] !== '[') continue;
+      var stack = [];
+      var inString = false;
+      var escaped = false;
+      for (var index = start; index < text.length; index += 1) {
+        var character = text[index];
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (character === '\\') escaped = true;
+          else if (character === '"') inString = false;
+          continue;
+        }
+        if (character === '"') { inString = true; continue; }
+        if (character === '{' || character === '[') stack.push(character);
+        if (character === '}' || character === ']') {
+          var expected = character === '}' ? '{' : '[';
+          if (stack[stack.length - 1] !== expected) break;
+          stack.pop();
+          if (!stack.length) {
+            try { return JSON.parse(text.slice(start, index + 1)); } catch (error) { break; }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  function extractStructuredRecipe(input) {
+    var parsed = parseJsonCandidate(input);
+    if (!parsed) return null;
+    var payload = Array.isArray(parsed) ? parsed[0] : parsed;
+    if (payload && payload.recipe && typeof payload.recipe === 'object') payload = payload.recipe;
+    if (payload && payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) payload = payload.data;
+    if (!payload || typeof payload !== 'object') return null;
+    var title = payload.title || payload.name || payload.recipeName;
+    var ingredients = payload.ingredients || payload.recipeIngredient;
+    var steps = payload.steps || payload.recipeInstructions;
+    if (!title || !ingredients || !steps) return null;
+    if (!Array.isArray(ingredients)) ingredients = [ingredients];
+    if (!Array.isArray(steps)) steps = [steps];
+    if (!ingredients.length || !steps.length) return null;
+    return payload;
+  }
+
+  function minutesFromValue(value) {
+    if (value == null || value === '') return 0;
+    var numeric = Number(value);
+    if (Number.isFinite(numeric)) return Math.max(0, numeric);
+    return parseDuration(value);
+  }
+
+  function categoryValue(value) {
+    var allowed = ['主菜', '副菜', '主食', '汁物', 'おつまみ'];
+    var text = String(value || '').trim();
+    return allowed.indexOf(text) !== -1 ? text : '主菜';
+  }
+
+  function servingsFromValue(value) {
+    var numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return Math.max(1, numeric);
+    var match = String(value || '').match(/\d+(?:\.\d+)?/);
+    return match ? Math.max(1, Number(match[0])) : 2;
+  }
+
+  function structuredRecipeToDraft(payload, sourceUrl) {
+    var ingredientValues = payload.ingredients != null ? (Array.isArray(payload.ingredients) ? payload.ingredients : [payload.ingredients]) : (Array.isArray(payload.recipeIngredient) ? payload.recipeIngredient : (payload.recipeIngredient ? [payload.recipeIngredient] : []));
+    var stepValues = payload.steps != null ? (Array.isArray(payload.steps) ? payload.steps : [payload.steps]) : (Array.isArray(payload.recipeInstructions) ? payload.recipeInstructions : (payload.recipeInstructions ? [payload.recipeInstructions] : []));
+    var ingredients = ingredientValues.map(function (item) {
+      if (typeof item === 'string') return parseIngredientLine(item);
+      if (!item || typeof item !== 'object') return null;
+      var name = String(item.name || item.displayName || item.ingredient || '').trim();
+      if (!name) return null;
+      var rawQuantity = item.quantity == null ? '' : String(item.quantity).trim();
+      var quantity = rawQuantity === '' ? null : parseNumber(rawQuantity);
+      var unit = String(item.unit || '').trim();
+      var originalText = String(item.originalText || '').trim() || (rawQuantity ? rawQuantity + (unit ? ' ' + unit : '') + ' ' + name : name);
+      return { id: uid('ri'), ingredientId: ensureIngredientMaster(name, '', unit), displayName: name, quantity: quantity, unit: unit, originalText: originalText, optional: Boolean(item.optional), note: String(item.note || '').trim() };
+    }).filter(Boolean);
+    var steps = stepValues.map(function (item) {
+      if (typeof item === 'string') return item.trim();
+      return item && String(item.instruction || item.text || item.name || '').trim();
+    }).filter(Boolean).map(function (instruction, index) { return { id: uid('step'), stepNumber: index + 1, instruction: instruction, timerSeconds: null }; });
+    var source = sourceUrl || payload.sourceUrl || payload.url || '';
+    var tags = Array.isArray(payload.tags) ? payload.tags : String(payload.tags || '').split(',').map(function (tag) { return tag.trim(); }).filter(Boolean);
+    if (isYouTubeUrl(source) && tags.indexOf('YouTube') === -1) tags.push('YouTube');
+    return {
+      id: null,
+      title: String(payload.title || payload.name || payload.recipeName || '').trim(),
+      description: String(payload.description || payload.memo || '').trim(),
+      originalServings: servingsFromValue(payload.servings != null ? payload.servings : payload.originalServings),
+      prepTimeMinutes: minutesFromValue(payload.prepTimeMinutes != null ? payload.prepTimeMinutes : payload.prepTime),
+      cookTimeMinutes: minutesFromValue(payload.cookTimeMinutes != null ? payload.cookTimeMinutes : payload.cookTime),
+      sourceType: 'ai_json',
+      sourceUrl: source,
+      thumbnailUrl: firstRecipeImage(payload.thumbnailUrl || payload.image, source || location.href) || thumbnailUrlForSource(source),
+      favorite: false,
+      category: categoryValue(payload.category || payload.recipeCategory),
+      tags: tags,
+      ingredients: ingredients,
+      steps: steps,
+      color: PALETTE[state.recipes.length % PALETTE.length],
+      rawMetadata: payload
+    };
+  }
+
+  function draftFromImportInput(input, sourceUrl) {
+    var jsonLd = extractJsonLd(input);
+    if (jsonLd) return jsonLdToDraft(jsonLd, sourceUrl);
+    var structured = extractStructuredRecipe(input);
+    return structured ? structuredRecipeToDraft(structured, sourceUrl) : null;
+  }
+
   function jsonLdToDraft(payload, sourceUrl) {
     var ingredients = Array.isArray(payload.recipeIngredient) ? payload.recipeIngredient : (payload.recipeIngredient ? [payload.recipeIngredient] : []);
     var instructions = payload.recipeInstructions || [];
@@ -2325,7 +2546,7 @@
       cookTimeMinutes: parseDuration(payload.cookTime) || parseDuration(payload.totalTime),
       sourceType: 'json_ld',
       sourceUrl: sourceUrl || payload.url || '',
-      thumbnailUrl: firstRecipeImage(payload.image),
+      thumbnailUrl: firstRecipeImage(payload.image, sourceUrl || location.href),
       favorite: false,
       category: payload.recipeCategory && /soup|汁/i.test(String(payload.recipeCategory)) ? '汁物' : '主菜',
       tags: Array.isArray(payload.keywords) ? payload.keywords : String(payload.keywords || '').split(',').map(function (tag) { return tag.trim(); }).filter(Boolean),
@@ -2345,19 +2566,23 @@
     }
   }
 
-  async function prepareUrlFallback(sourceUrl, message) {
-    var title = '';
+  async function prepareUrlFallback(sourceUrl, message, metadata) {
+    metadata = metadata || { title: '', description: '', thumbnailUrl: '' };
+    var title = metadata.title || '';
+    var description = metadata.description || '';
+    var thumbnailUrl = metadata.thumbnailUrl || '';
     if (isYouTubeUrl(sourceUrl)) {
       try {
         var response = await fetch('https://www.youtube.com/oembed?url=' + encodeURIComponent(sourceUrl) + '&format=json');
         if (response.ok) {
-          var metadata = await response.json();
-          title = metadata.title || '';
+          var oembedMetadata = await response.json();
+          title = oembedMetadata.title || '';
+          thumbnailUrl = safeImageUrl(oembedMetadata.thumbnail_url) || thumbnailUrl;
         }
       } catch (error) { /* oEmbed is optional; the user can paste the title */ }
     }
     ui.importError = message;
-    ui.urlFallback = { sourceUrl: sourceUrl, title: title, description: '' };
+    ui.urlFallback = { sourceUrl: sourceUrl, title: title, description: description, thumbnailUrl: thumbnailUrl || thumbnailUrlForSource(sourceUrl) };
     render();
   }
 
@@ -2365,29 +2590,38 @@
     var data = new FormData(form);
     var url = String(data.get('url') || '').trim();
     var source = String(data.get('source') || '').trim();
+    var mode = String(data.get('mode') || 'auto');
     ui.importError = '';
     ui.urlFallback = null;
     if (!source && !url) { ui.importError = 'URLまたはJSON-LD / HTMLを入力してください。'; render(); return; }
-    var payload = extractJsonLd(source);
-    if (!payload && url) {
+    var importedDraft = draftFromImportInput(source, url);
+    var pageMetadata = extractPageMetadata(source, url || location.href);
+    if (!importedDraft && url) {
       try {
         var response = await fetch(url, { headers: { Accept: 'text/html,application/xhtml+xml' } });
         if (!response.ok) throw new Error('HTTP ' + response.status);
-        payload = extractJsonLd(await response.text());
+        var html = await response.text();
+        importedDraft = draftFromImportInput(html, url);
+        pageMetadata = extractPageMetadata(html, url);
       } catch (error) {
-        await prepareUrlFallback(url, 'URLを読み込めませんでした。タイトルと備考だけで登録することもできます。');
+        await prepareUrlFallback(url, 'URLを読み込めませんでした。取得できたURL情報だけで登録できます。', pageMetadata);
         return;
       }
     }
-    if (!payload) {
-      if (url) await prepareUrlFallback(url, 'Recipe形式のJSON-LDを検出できませんでした。タイトルと備考だけで登録することもできます。');
+    if (!importedDraft) {
+      if (url) await prepareUrlFallback(url, 'Recipe形式のJSON-LDを検出できませんでした。取得できたURL情報だけで登録できます。', pageMetadata);
       else {
-        ui.importError = 'Recipe形式のJSON-LDを検出できませんでした。内容を確認して再度お試しください。';
+        ui.importError = 'レシピJSONまたはGeminiの整形JSONを検出できませんでした。内容を確認して再度お試しください。';
         render();
       }
       return;
     }
-    ui.importDraft = jsonLdToDraft(payload, url);
+    if (mode === 'auto' && importedDraft.title && importedDraft.ingredients.length && importedDraft.steps.length) {
+      ui.importDraft = null;
+      saveRecipeDraft(importedDraft, null);
+      return;
+    }
+    ui.importDraft = importedDraft;
     ui.urlFallback = null;
     render();
   }
