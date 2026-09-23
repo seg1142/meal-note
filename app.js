@@ -1538,8 +1538,8 @@
     var fallbackHint = fallback && isYouTubeUrl(fallback.sourceUrl)
       ? 'YouTubeからはタイトルとサムネイルを自動取得しました。動画の説明欄に材料がない場合、材料・工程はレシピ詳細から追加できます。'
       : 'このURLから材料・工程を自動取得できませんでした。取得できたタイトル・説明・画像を使って、URLを先に登録できます。';
-    var fallbackHtml = fallback ? '<section class="url-fallback"><div>' + fallbackImage + '<div><h2>URL情報で登録</h2><p>' + escapeHTML(fallbackHint) + '</p></div></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt" data-prompt-url="' + escapeAttr(fallback.sourceUrl) + '">Gemini用プロンプトをコピー</button><span class="field-note">動画をGeminiで要約した回答を、下の貼り付け欄へ戻して登録できます。</span></div><form class="form-layout" data-form="url-fallback" data-source-url="' + escapeAttr(fallback.sourceUrl) + '" data-thumbnail-url="' + escapeAttr(fallback.thumbnailUrl || '') + '"><div class="field"><label for="fallback-title">タイトル</label><input id="fallback-title" name="title" value="' + escapeAttr(fallback.title || '') + '" placeholder="例：動画のレシピ名" required></div><div class="field"><label for="fallback-description">備考・材料メモ（任意）</label><textarea id="fallback-description" name="description" placeholder="動画の説明欄や、あとで確認したいメモを貼り付けできます。">' + escapeHTML(fallback.description || '') + '</textarea></div><div class="form-actions"><button class="button button-primary" type="submit">このURL情報で登録</button><button class="button button-quiet" type="button" data-action="clear-import">キャンセル</button></div></form></section>' : '';
-    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URLだけでレシピ登録</h1><p>レシピサイトのリンクを貼り付けるだけで、材料・工程・サムネイルを自動入力します。</p></div></div><section class="panel form-panel"><div class="notice">レシピサイトはRecipe JSON-LDが公開されていれば、内容をまとめて取り込めます。YouTubeはGeminiに動画を要約させたJSONを貼り付けると、材料・工程までまとめて登録できます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピサイト／YouTubeのURL</label><input id="import-url" name="url" type="url" inputmode="url" autocomplete="url" value="' + escapeAttr(fallback ? fallback.sourceUrl : '') + '" placeholder="https://..."><span class="field-note">Geminiの回答に元URLが含まれていれば、URL欄を空欄にして回答だけ貼り付けることもできます。</span></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt">Gemini用プロンプトをコピー</button><span class="field-note">主にYouTube向け。コピー後、動画ページやGeminiで貼り付けてください。</span></div><details class="import-advanced"><summary>Geminiの回答／JSON-LD／HTMLを貼り付ける</summary><div class="field"><label for="import-source">Geminiの回答またはJSON-LD／ページHTML</label><textarea id="import-source" name="source" placeholder="Geminiの回答は、指定されたJSONだけを貼り付けてください。```json の囲みも解析できます。"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div></details><div class="form-actions"><button class="button button-primary" type="submit" name="mode" value="auto">URLだけで登録</button><button class="button button-quiet" type="submit" name="mode" value="review">内容を確認して登録</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + fallbackHtml + '</section>';
+    var fallbackHtml = fallback ? '<section class="url-fallback"><div>' + fallbackImage + '<div><h2>URL情報で登録</h2><p>' + escapeHTML(fallbackHint) + '</p></div></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt">Gemini用プロンプトをコピー</button><span class="field-note">動画をGeminiで要約した回答を、下の貼り付け欄へ戻して登録できます。</span></div><form class="form-layout" data-form="url-fallback" data-source-url="' + escapeAttr(fallback.sourceUrl) + '" data-thumbnail-url="' + escapeAttr(fallback.thumbnailUrl || '') + '"><div class="field"><label for="fallback-title">タイトル</label><input id="fallback-title" name="title" value="' + escapeAttr(fallback.title || '') + '" placeholder="例：動画のレシピ名" required></div><div class="field"><label for="fallback-description">備考・材料メモ（任意）</label><textarea id="fallback-description" name="description" placeholder="動画の説明欄や、あとで確認したいメモを貼り付けできます。">' + escapeHTML(fallback.description || '') + '</textarea></div><div class="form-actions"><button class="button button-primary" type="submit">このURL情報で登録</button><button class="button button-quiet" type="button" data-action="clear-import">キャンセル</button></div></form></section>' : '';
+    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URLだけでレシピ登録</h1><p>レシピサイトのリンクを貼り付けるだけで、材料・工程・サムネイルを自動入力します。</p></div></div><section class="panel form-panel"><div class="notice">レシピサイトはRecipe JSON-LDが公開されていれば、内容をまとめて取り込めます。YouTubeはGeminiに動画を要約させたJSONを貼り付けると、材料・工程までまとめて登録できます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピサイト／YouTubeのURL</label><input id="import-url" name="url" type="url" inputmode="url" autocomplete="url" value="' + escapeAttr(fallback ? fallback.sourceUrl : '') + '" placeholder="https://..."><span class="field-note">Geminiの回答に元URLが含まれていれば、URL欄を空欄にして回答だけ貼り付けることもできます。</span></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt">Gemini用プロンプトをコピー</button><span class="field-note">YouTube下部のGemini向け。動画を表示した状態でコピーしたプロンプトを貼り付けてください。</span></div><details class="import-advanced"><summary>Geminiの回答／JSON-LD／HTMLを貼り付ける</summary><div class="field"><label for="import-source">Geminiの回答またはJSON-LD／ページHTML</label><textarea id="import-source" name="source" placeholder="Geminiの回答は、指定されたJSONだけを貼り付けてください。```json の囲みも解析できます。"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div></details><div class="form-actions"><button class="button button-primary" type="submit" name="mode" value="auto">URLだけで登録</button><button class="button button-quiet" type="submit" name="mode" value="review">内容を確認して登録</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + fallbackHtml + '</section>';
   }
 
   function renderImportReview() {
@@ -1829,33 +1829,52 @@
     return draft;
   }
 
-  function geminiPromptForUrl(sourceUrl) {
-    var url = String(sourceUrl || '').trim();
+  function geminiPromptForUrl() {
     return [
-      'あなたは料理動画・レシピページの内容を整理するアシスタントです。以下のURLを確認し、料理名、材料、作り方、人数、調理時間を抽出してください。',
-      '動画の場合は、動画の内容・説明欄・表示される材料を優先し、確認できない情報は推測せず null または空配列にしてください。',
+      'この動画の料理を、献立・レシピ管理アプリに登録できる形式で整理してください。',
       '',
-      '対象URL:',
-      url,
+      '動画内で確認できる情報だけを使い、推測で補わないでください。',
+      '不明な項目は null にしてください。',
+      '回答は説明文やMarkdownを付けず、JSONのみで返してください。',
       '',
-      '返答は説明文やMarkdownを付けず、次のJSONオブジェクトだけにしてください。```json の囲みも不要です。',
+      '以下の形式を厳守してください。',
+      '',
       '{',
-      '  "sourceUrl": ' + JSON.stringify(url) + ',',
+      '  "sourceUrl": "Geminiが認識した動画URL。不明な場合は null",',
       '  "title": "料理名",',
-      '  "description": "料理の特徴や保存メモ",',
-      '  "category": "主菜",',
-      '  "tags": ["YouTube"],',
+      '  "description": "料理の簡単な説明",',
+      '  "category": "主菜・副菜・主食・汁物・その他のいずれか",',
+      '  "tags": ["和食", "簡単"],',
       '  "servings": 2,',
-      '  "prepTimeMinutes": 10,',
-      '  "cookTimeMinutes": 20,',
+      '  "prepTimeMinutes": null,',
+      '  "cookTimeMinutes": null,',
       '  "thumbnailUrl": null,',
       '  "ingredients": [',
-      '    {"name": "豚こま切れ肉", "quantity": 200, "unit": "g", "note": "", "optional": false}',
+      '    {',
+      '      "name": "材料名",',
+      '      "quantity": 1,',
+      '      "unit": "個",',
+      '      "note": "補足事項。なければ null",',
+      '      "optional": false',
+      '    }',
       '  ],',
-      '  "steps": ["工程1", "工程2"]',
+      '  "steps": [',
+      '    "手順1",',
+      '    "手順2"',
+      '  ]',
       '}',
       '',
-      '材料のquantityは数値またはnull、unitは g・kg・個・本・枚・束・大さじ・小さじなどを使ってください。材料名、分量、単位が動画から確認できない場合は無理に補完しないでください。'
+      '追加ルール：',
+      '- 材料はできるだけ1行1材料に分ける',
+      '- 数量は数値で表す',
+      '- 「1/4個」は quantity を 0.25、unit を「個」にする',
+      '- 「少々」「適量」など数量化できないものは quantity を null にする',
+      '- 材料名と数量・単位は分離する',
+      '- 手順は動画の流れに沿って、実行しやすい文章に整理する',
+      '- 動画内で確認できない分量や時間は推測しない',
+      '- 料理名が動画タイトルと異なる場合は、実際の料理内容に合う料理名を title にする',
+      '- sourceUrl はGeminiが認識できた場合のみ設定し、認識できなければ null にする',
+      '- JSON以外の文章、見出し、``` は出力しない'
     ].join('\n');
   }
 
@@ -1885,14 +1904,7 @@
     if (!target) return;
     var action = target.dataset.action;
     if (action === 'copy-gemini-prompt') {
-      var importUrlInput = document.getElementById('import-url');
-      var promptUrl = String(target.dataset.promptUrl || (importUrlInput && importUrlInput.value) || '').trim();
-      if (!promptUrl) {
-        showToast('先にYouTubeまたはレシピページのURLを入力してください。');
-        if (importUrlInput) importUrlInput.focus();
-        return;
-      }
-      copyTextToClipboard(geminiPromptForUrl(promptUrl)).then(function (copied) {
+      copyTextToClipboard(geminiPromptForUrl()).then(function (copied) {
         showToast(copied ? 'Gemini用プロンプトをコピーしました。' : 'コピーできませんでした。プロンプトを手動で選択してください。');
       });
       return;

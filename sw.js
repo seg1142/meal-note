@@ -1,9 +1,9 @@
-const CACHE_NAME = 'meal-note-shell-v24';
+const CACHE_NAME = 'meal-note-shell-v25';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=21',
-  './app.js?v=22',
+  './app.js?v=23',
   './manifest.webmanifest',
   './app-config.js',
   './app-icon-192.png',
