@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import unittest
+import tempfile
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -55,6 +56,16 @@ class SaveLinkTests(unittest.TestCase):
         for destination in ("javascript:alert(1)", "https://user:secret@example.com/", "https://example.com/#wrong", "https://example.com/?key=value"):
             with self.subTest(destination=destination), self.assertRaises(ValueError):
                 save_link.build_link(self.recipe(), destination)
+
+    def test_cli_prefers_local_sync_configuration(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / "data") as directory:
+            config = Path(directory) / "service-config.json"
+            self.assertEqual(save_link.default_app_url(config), save_link.DEFAULT_APP_URL)
+            config.write_text(json.dumps({"publicOrigin": "https://pc.example.ts.net:8443"}), encoding="utf-8-sig")
+            self.assertEqual(save_link.default_app_url(config), "https://pc.example.ts.net:8443/")
+            config.write_text("{}", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                save_link.default_app_url(config)
 
 
 if __name__ == "__main__":

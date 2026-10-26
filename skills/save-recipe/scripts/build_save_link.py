@@ -12,6 +12,19 @@ MAX_LINK_CHARS = 12_000
 DEFAULT_APP_URL = "https://seg1142.github.io/meal-note/"
 
 
+def default_app_url(config_path=None):
+    """Prefer this user's local sync address without embedding it in public source."""
+    if config_path is None:
+        config_path = Path(__file__).resolve().parents[3] / "data/local-sync/service-config.json"
+    if not config_path.exists():
+        return DEFAULT_APP_URL
+    config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    origin = config.get("publicOrigin")
+    if not isinstance(origin, str) or not origin:
+        raise ValueError("The local sync configuration has no publicOrigin.")
+    return origin.rstrip("/") + "/"
+
+
 def validate_recipe(recipe):
     if not isinstance(recipe, dict):
         raise ValueError("Pass one recipe object, not an array or a backup.")
@@ -73,11 +86,11 @@ def build_link(recipe, app_url=DEFAULT_APP_URL):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("recipe_file", type=Path)
-    parser.add_argument("--app-url", default=DEFAULT_APP_URL)
+    parser.add_argument("--app-url")
     args = parser.parse_args()
     try:
         recipe = json.loads(args.recipe_file.read_text(encoding="utf-8-sig"))
-        result = build_link(recipe, args.app_url)
+        result = build_link(recipe, args.app_url or default_app_url())
     except (OSError, ValueError, TypeError) as exc:
         parser.exit(2, f"Error: {exc}\n")
     sys.stdout.reconfigure(encoding="utf-8")

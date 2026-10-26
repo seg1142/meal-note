@@ -53,6 +53,7 @@ originalText を材料ごとに保持し、数値数量だけを献立人数に�
 - Web App Manifest and application-shell service worker
 - PWA icon uses the supplied `app-icon-192.png` / `app-icon-512.png` assets
 - Data Management: local JSON export/import/share and an automatic local snapshot before restore/sync
+- Optional private PC server: Tailscale HTTPS, automatic device synchronization, offline changes, and local disk backups
 - Google Drive sync adapter (optional / deferred): `drive.file` scope, `Recipe App/recipe-app-sync.json`, `backups/`, record-level LWW merge, and no token/secret persistence
 - Keyboard focus, labels, responsive touch targets
 
@@ -91,9 +92,37 @@ python skills/save-recipe/scripts/build_save_link.py recipe.json
 python skills/save-recipe/scripts/build_save_link.py recipe.json --app-url http://127.0.0.1:4173/
 ~~~
 
-Use the same device and browser as the usual Meal Note app. Saving from another browser does not synchronize the data automatically. A fully chat-only remote write would require an authenticated API or control of the intended existing browser; this static app has no registration API.
+The public GitHub Pages version stores data in each browser. For PC/phone synchronization, use the private PC version below on both devices. The link helper prefers the private origin in `data/local-sync/service-config.json` when that local configuration exists. The installed ChatGPT skill can use the same private URL in its instructions; keep that personal address out of public source.
 
 Recipe test data, generated links, skill ZIPs, and screenshots belong under the ignored `data/` or `exports/` directories and must not be included in the public deployment.
+
+### PC and phone synchronization through Tailscale
+
+The optional Node.js server serves the app and `/api/sync` from one origin. `Tailscale Serve` provides HTTPS on port 8443 and forwards to `127.0.0.1:4319`; existing services on port 443 remain available. Both devices must use the new private URL, with Tailscale connected. Google Cloud configuration is unnecessary.
+
+On Windows, with Node.js and Tailscale installed and connected, run:
+
+~~~powershell
+.\scripts\install-local-sync.ps1
+~~~
+
+The installer prints the private URL and registers `MealNoteLocalSync` to start at Windows sign-in, with automatic retry after failures. It writes machine-specific configuration under the ignored `data/local-sync/` directory. The server is bound to loopback and is shared only inside the tailnet through Serve. It exposes only the app shell and sync API; source scripts, settings files, data files, and backups are not static downloads. API writes require the expected same-origin JSON request.
+
+For manual operation:
+
+~~~text
+node server/local-sync.cjs --port 4319 --public-origin https://YOUR-PC.YOUR-TAILNET.ts.net:8443 --data-dir data/local-sync
+~~~
+
+Before first use, export the existing browser data from 「その他 → データ管理」 and retain that backup. Initialize an empty server by sending `{ "snapshot": <the exported JSON> }` to `POST /api/sync`, using `Content-Type: application/json` and an allowed `Origin` such as `http://127.0.0.1:4319`. The server rejects invalid snapshots. New devices first load the server data, so their built-in samples cannot replace existing PC recipes.
+
+Changes save to the browser first, then sync after a short delay. The app also syncs at launch, reconnection, return to the screen, and every 15 seconds while visible. 「その他 → データ管理」 shows pending changes, the last sync, and 「今すぐ同期」. API responses are never cached by the service worker. JSON imports in the sync version merge records instead of replacing pending changes.
+
+The server serializes concurrent writes, merges records by ID and update time, retains deletion markers, and merges shopping-list items individually. Different records survive concurrent edits; for simultaneous edits of the same recipe, the later update wins. Changes made while a response is pending remain queued. First loading requires access to the PC; after the shell and data are cached, offline viewing/editing is available and changes are sent on reconnection. Mobile background execution is not required; open or return to the app to synchronize.
+
+The PC must be running and reachable to exchange updates. Sleep or shutdown stops synchronization; this setup does not change power settings. The canonical snapshot is `data/local-sync/state.json`, with up to 20 previous revisions under `data/local-sync/backups/`. Keep these private and include them in normal PC backups. Corrupt data stops the server instead of silently resetting it.
+
+To stop this optional service, stop/disable the `MealNoteLocalSync` scheduled task and remove only its Serve endpoint with `tailscale serve --https=8443 off`. Do not use a global Serve reset, because other services may share Tailscale.
 
 ### Google Drive setup (optional / deferred)
 

@@ -46,7 +46,9 @@
   var toast = document.getElementById('toast');
   var toastTimer = null;
   var wakeLock = null;
+  var localSyncWasFresh = false;
   var state = loadState();
+  var localSyncRuntime = null;
   var driveRuntime = {
     accessToken: '',
     tokenClient: null,
@@ -619,16 +621,31 @@
       console.warn('Meal Note storage could not be read.', error);
     }
     var seed = normalizeState(createSeedState());
+    localSyncWasFresh = true;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(seed)); } catch (error) { /* private browsing may block storage */ }
     return seed;
   }
 
-  function saveState() {
+  function saveState(options) {
+    options = options || {};
+    var syncChanged = localSyncRuntime && !options.skipLocalSync && JSON.stringify(syncDataFrom(state)) !== localSyncRuntime.lastSavedData;
+    var previousState = state;
+    var previousSyncMeta = state.sync.localServer ? clone(state.sync.localServer) : null;
     try {
+      if (localSyncRuntime) mergeStoredLocalState();
+      if (syncChanged) {
+        state.sync.localServer.pending = true;
+        state.sync.localServer.generation += 1;
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      document.getElementById('storageStatus').textContent = 'ローカル保存済み';
+      if (localSyncRuntime) localSyncRuntime.lastSavedData = JSON.stringify(syncDataFrom(state));
+      updateLocalSyncStatus();
+      if (!localSyncRuntime) document.getElementById('storageStatus').textContent = 'ローカル保存済み';
+      if (syncChanged) scheduleLocalSync(600);
       return true;
     } catch (error) {
+      state = previousState;
+      if (previousSyncMeta) state.sync.localServer = previousSyncMeta;
       document.getElementById('storageStatus').textContent = '保存領域を確認';
       showToast('ブラウザの保存領域に書き込めませんでした。');
       return false;
@@ -741,15 +758,20 @@
     }
   }
 
-  function applyDataSnapshot(snapshot) {
+  function applyDataSnapshot(snapshot, options) {
+    options = options || {};
+    var previousState = state;
     var currentSync = clone(state.sync || {});
     var imported = normalizeState(Object.assign({ version: 2 }, clone(snapshot.data)));
-    imported.sync = Object.assign({}, currentSync, imported.sync || {}, { deviceId: currentSync.deviceId || createDeviceId(), lastError: '' });
+    imported.sync = Object.assign({}, imported.sync || {}, currentSync, { deviceId: currentSync.deviceId || createDeviceId(), lastError: '' });
     imported.sync.settingsUpdatedAt = snapshot.data.settingsUpdatedAt || currentSync.settingsUpdatedAt || '';
     state = imported;
-    saveState();
-    ui.pendingImport = null;
-    ui.dataError = '';
+    if (!saveState(options)) { state = previousState; return false; }
+    if (!options.skipLocalSync) {
+      ui.pendingImport = null;
+      ui.dataError = '';
+    }
+    return true;
   }
 
   function readSnapshotFile(file) {
@@ -785,7 +807,7 @@
 
   function mergeRecordArrays(localRecords, cloudRecords) {
     var result = [];
-    var byId = {};
+    var byId = Object.create(null);
     (localRecords || []).concat(cloudRecords || []).forEach(function (record) {
       if (!record) return;
       var item = clone(record);
@@ -817,9 +839,12 @@
   function mergeSnapshots(localSnapshot, cloudSnapshot) {
     var localData = localSnapshot.data || {};
     var cloudData = cloudSnapshot.data || {};
-    var mergedSettingsTime = String(localData.settingsUpdatedAt || localSnapshot.updatedAt || '') >= String(cloudData.settingsUpdatedAt || cloudSnapshot.updatedAt || '')
-      ? String(localData.settingsUpdatedAt || localSnapshot.updatedAt || '')
-      : String(cloudData.settingsUpdatedAt || cloudSnapshot.updatedAt || '');
+    var localSettingsTime = String(localData.settingsUpdatedAt || '');
+    var cloudSettingsTime = String(cloudData.settingsUpdatedAt || '');
+    var localHasSettings = localData.settings && Object.keys(localData.settings).length > 0;
+    var cloudHasSettings = cloudData.settings && Object.keys(cloudData.settings).length > 0;
+    var useLocalSettings = localHasSettings && (!cloudHasSettings || localSettingsTime > cloudSettingsTime || (localSettingsTime === cloudSettingsTime && JSON.stringify(localData.settings) >= JSON.stringify(cloudData.settings)));
+    var mergedSettingsTime = useLocalSettings ? localSettingsTime : cloudSettingsTime;
     return {
       schemaVersion: SYNC_SCHEMA_VERSION,
       syncVersion: Math.max(Number(localSnapshot.syncVersion || 0), Number(cloudSnapshot.syncVersion || 0)) + 1,
@@ -834,10 +859,209 @@
         pantryItems: mergeRecordArrays(localData.pantryItems, cloudData.pantryItems),
         cookingHistory: mergeRecordArrays(localData.cookingHistory, cloudData.cookingHistory),
         importSources: mergeRecordArrays(localData.importSources, cloudData.importSources),
-        settings: String(localData.settingsUpdatedAt || localSnapshot.updatedAt || '') >= String(cloudData.settingsUpdatedAt || cloudSnapshot.updatedAt || '') ? clone(localData.settings) : clone(cloudData.settings),
+        settings: clone((useLocalSettings ? localData.settings : cloudData.settings) || {}),
         settingsUpdatedAt: mergedSettingsTime
       }
     };
+  }
+
+  function localSyncMeta() {
+    return state.sync.localServer;
+  }
+
+  function localSyncLabel() {
+    if (!localSyncRuntime) return '';
+    if (localSyncRuntime.inFlight) return '同期中';
+    if (localSyncRuntime.error) return localSyncMeta().pending ? '未送信の変更あり' : 'PCに接続できません';
+    if (localSyncMeta().pending) return '同期待ち';
+    return localSyncMeta().initialized ? 'PC同期済み' : 'PCに接続中';
+  }
+
+  function updateLocalSyncStatus() {
+    if (!localSyncRuntime) return;
+    var node = document.getElementById('storageStatus');
+    if (node) node.textContent = localSyncLabel();
+    var label = document.getElementById('localSyncStatus');
+    if (label) label.textContent = localSyncLabel();
+  }
+
+  function scheduleLocalSync(delay) {
+    if (!localSyncRuntime) return;
+    clearTimeout(localSyncRuntime.timer);
+    localSyncRuntime.timer = setTimeout(function () { syncLocalServer(); }, delay == null ? 600 : delay);
+  }
+
+  function localSyncPatch(source) {
+    source = source || state;
+    var snapshot = buildSyncSnapshot(source);
+    var meta = source.sync.localServer;
+    var baseline = meta && meta.baseline;
+    if (!meta || meta.initialized || !baseline) return snapshot;
+    ['recipes', 'ingredientMaster', 'tags', 'mealPlans', 'shoppingLists', 'pantryItems', 'cookingHistory', 'importSources'].forEach(function (key) {
+      var old = Object.create(null);
+      (baseline[key] || []).forEach(function (record) { old[record.id] = JSON.stringify(record); });
+      snapshot.data[key] = snapshot.data[key].filter(function (record) { return old[record.id] !== JSON.stringify(record); });
+    });
+    if (JSON.stringify(snapshot.data.settings) === JSON.stringify(baseline.settings) && snapshot.data.settingsUpdatedAt === baseline.settingsUpdatedAt) {
+      snapshot.data.settings = {};
+      snapshot.data.settingsUpdatedAt = '';
+    }
+    return snapshot;
+  }
+
+  function localSyncDataKey(data) {
+    var value = clone(data);
+    ['recipes', 'ingredientMaster', 'tags', 'mealPlans', 'shoppingLists', 'pantryItems', 'cookingHistory', 'importSources'].forEach(function (key) {
+      value[key] = (value[key] || []).slice().sort(function (left, right) { return String(left.id).localeCompare(String(right.id)); });
+    });
+    (value.shoppingLists || []).forEach(function (list) { list.items = (list.items || []).slice().sort(function (left, right) { return String(left.id).localeCompare(String(right.id)); }); });
+    function stable(item) {
+      if (Array.isArray(item)) return item.map(stable);
+      if (!item || typeof item !== 'object') return item;
+      var result = Object.create(null);
+      Object.keys(item).sort().forEach(function (key) { result[key] = stable(item[key]); });
+      return result;
+    }
+    return JSON.stringify(stable(value));
+  }
+
+  function mergeStoredLocalState() {
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (error) { return false; }
+    if (!parsed || (parsed.version !== 1 && parsed.version !== 2) || !parsed.sync || !parsed.sync.localServer) return false;
+    var stored = normalizeState(parsed);
+    var current = state;
+    var currentMeta = current.sync.localServer;
+    var storedMeta = stored.sync.localServer;
+    var initialized = Boolean(currentMeta.initialized || storedMeta.initialized);
+    var merged = initialized
+      ? mergeSnapshots(localSyncPatch(current), localSyncPatch(stored))
+      : mergeSnapshots(buildSyncSnapshot(current), buildSyncSnapshot(stored));
+    var authority = null;
+    if (currentMeta.initialized) authority = current;
+    if (storedMeta.initialized && (!authority || Number(storedMeta.revision || 0) > Number(currentMeta.revision || 0) || (Number(storedMeta.revision || 0) === Number(currentMeta.revision || 0) && String(storedMeta.lastSyncedAt || '') >= String(currentMeta.lastSyncedAt || '')))) authority = stored;
+    var pending = Boolean(currentMeta.pending || storedMeta.pending);
+    if (authority) pending = Boolean(authority.sync.localServer.pending || localSyncDataKey(merged.data) !== localSyncDataKey(syncDataFrom(authority)));
+    var meta = Object.assign({}, storedMeta, currentMeta, {
+      initialized: initialized,
+      baseline: initialized ? null : currentMeta.baseline || storedMeta.baseline || null,
+      generation: Math.max(Number(currentMeta.generation || 0), Number(storedMeta.generation || 0)),
+      revision: Math.max(Number(currentMeta.revision || 0), Number(storedMeta.revision || 0)),
+      lastSyncedAt: String(currentMeta.lastSyncedAt || '') > String(storedMeta.lastSyncedAt || '') ? currentMeta.lastSyncedAt : storedMeta.lastSyncedAt,
+      pending: pending
+    });
+    var imported = normalizeState(Object.assign({ version: 2, seedVersion: Math.max(Number(current.seedVersion || 0), Number(stored.seedVersion || 0)) }, clone(merged.data)));
+    imported.sync = Object.assign({}, stored.sync, current.sync, { localServer: meta, settingsUpdatedAt: merged.data.settingsUpdatedAt || '' });
+    state = imported;
+    return localSyncDataKey(merged.data) !== localSyncDataKey(syncDataFrom(stored));
+  }
+
+  async function localSyncRequest(method, body) {
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 10000) : null;
+    try {
+      var response = await fetch(localSyncRuntime.endpoint, {
+        method: method,
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: Object.assign({ Accept: 'application/json' }, body ? { 'Content-Type': 'application/json' } : {}),
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller ? controller.signal : undefined
+      });
+      if (!response.ok) throw new Error('同期サーバーへの接続に失敗しました。');
+      var result = await response.json();
+      if (!result || typeof result.revision !== 'number' || (result.snapshot !== null && !validateSyncSnapshot(result.snapshot).ok)) throw new Error('同期データを読み込めませんでした。');
+      return result;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  function refreshAfterLocalSync() {
+    var active = document.activeElement;
+    var typing = active && active.closest && active.closest('input, textarea, select, [contenteditable="true"]');
+    var editing = document.querySelector && document.querySelector('form[data-form="recipe"], form[data-form="import-review"], form[data-form="import"]');
+    if (!typing && !editing && !modal.open) render();
+    updateLocalSyncStatus();
+  }
+
+  async function syncLocalServer() {
+    if (!localSyncRuntime || localSyncRuntime.inFlight) return false;
+    if (navigator.onLine === false) {
+      localSyncRuntime.error = 'PCが起動し、Tailscaleが接続されると再同期します。';
+      updateLocalSyncStatus();
+      return false;
+    }
+    localSyncRuntime.inFlight = true;
+    localSyncRuntime.error = '';
+    updateLocalSyncStatus();
+    var sentGeneration = localSyncMeta().generation;
+    var completed = false;
+    try {
+      var result = await localSyncRequest('GET');
+      var meta = localSyncMeta();
+      if (!result.snapshot || meta.pending || (!meta.initialized && !meta.baseline)) {
+        var outgoing = result.snapshot ? localSyncPatch() : buildSyncSnapshot();
+        sentGeneration = meta.generation;
+        result = await localSyncRequest('POST', { snapshot: outgoing });
+      } else sentGeneration = meta.generation;
+      if (!result.snapshot) throw new Error('同期データがまだありません。');
+      var currentPatch = localSyncPatch();
+      var merged = mergeSnapshots(currentPatch, result.snapshot);
+      var before = clone(state);
+      var changedDuringRequest = localSyncMeta().generation !== sentGeneration;
+      localSyncMeta().initialized = true;
+      localSyncMeta().baseline = null;
+      localSyncMeta().pending = changedDuringRequest;
+      localSyncMeta().revision = result.revision;
+      localSyncMeta().lastSyncedAt = nowISO();
+      localSyncMeta().lastError = '';
+      if (!applyDataSnapshot(merged, { skipLocalSync: true })) {
+        state = before;
+        throw new Error('この端末の保存領域に書き込めないため、同期結果を適用できませんでした。');
+      }
+      completed = true;
+      refreshAfterLocalSync();
+    } catch (error) {
+      localSyncRuntime.error = error && (error.name === 'AbortError' || error.name === 'TypeError') ? 'PCに接続できません。PCの起動とTailscaleの接続を確認してください。' : error && error.message ? error.message : 'PCに接続できません。TailscaleとPCの起動を確認してください。';
+      localSyncMeta().lastError = localSyncRuntime.error;
+      saveState({ skipLocalSync: true });
+    } finally {
+      localSyncRuntime.inFlight = false;
+      refreshAfterLocalSync();
+      if (completed && localSyncMeta().pending) scheduleLocalSync(100);
+    }
+    return completed;
+  }
+
+  function initializeLocalSync() {
+    var config = window.MEAL_NOTE_CONFIG && window.MEAL_NOTE_CONFIG.localSync;
+    if (!config || !config.enabled) return;
+    var endpoint;
+    try {
+      endpoint = new URL(config.endpoint || './api/sync', location.href);
+      if (endpoint.origin !== location.origin || !/^https?:$/.test(endpoint.protocol) || endpoint.username || endpoint.password) return;
+    } catch (error) { return; }
+    var existing = state.sync.localServer;
+    state.sync.localServer = Object.assign({ initialized: false, pending: !localSyncWasFresh, generation: 0, revision: 0, lastSyncedAt: '', lastError: '', baseline: localSyncWasFresh ? syncDataFrom(state) : null }, existing || {});
+    localSyncRuntime = { endpoint: endpoint.href, timer: null, inFlight: false, error: '', lastSavedData: JSON.stringify(syncDataFrom(state)) };
+    saveState({ skipLocalSync: true });
+    window.addEventListener('storage', function (event) {
+      if (event.key !== STORAGE_KEY) return;
+      try {
+        var needsPersistence = mergeStoredLocalState();
+        if (needsPersistence) saveState({ skipLocalSync: true });
+        else localSyncRuntime.lastSavedData = JSON.stringify(syncDataFrom(state));
+        refreshAfterLocalSync();
+        if (localSyncMeta().pending) scheduleLocalSync(100);
+      } catch (error) { /* preserve the current tab if another tab's data cannot be read */ }
+    });
+    window.addEventListener('online', function () { scheduleLocalSync(50); });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState !== 'hidden') scheduleLocalSync(50); });
+    if (typeof setInterval === 'function') setInterval(function () { if (document.visibilityState !== 'hidden') syncLocalServer(); }, Math.max(5000, Number(config.pollIntervalMs) || 15000));
+    scheduleLocalSync(0);
   }
 
   function googleClientId() {
@@ -1605,12 +1829,13 @@
     var driveLabel = !configured ? '未設定' : (driveRuntime.connected ? '接続済み' : '未接続');
     var activeRecipes = state.recipes.filter(function (item) { return !item.deletedAt; }).length;
     var pending = ui.pendingImport;
-    var pendingSummary = pending ? '<div class="data-preview"><strong>読み込み準備完了</strong><span>レシピ ' + pending.data.recipes.length + '件 · 献立 ' + pending.data.mealPlans.length + '件 · 買い物リスト ' + pending.data.shoppingLists.length + '件</span><div class="form-actions"><button class="button button-primary" type="button" data-action="apply-local-import">この内容で置き換える</button><button class="button" type="button" data-action="cancel-local-import">キャンセル</button></div></div>' : '';
-     return '<div class="page-heading"><div><a class="link" href="#/more">← その他</a><p class="eyebrow" style="margin-top:15px">Data management</p><h1>データ管理</h1><p>通常の保存先はこの端末です。普段のバックアップ・端末移行はJSONの書き出しと共有を使います。</p></div></div>' +
+    var localSyncPanel = localSyncRuntime ? '<section class="panel form-panel" style="margin-bottom:16px"><div class="section-heading"><div><h2>PCとスマホの同期</h2><p>PCが起動し、両端末のTailscaleが接続されている間に同期します。</p></div><span id="localSyncStatus" class="pill">' + escapeHTML(localSyncLabel()) + '</span></div><div class="data-status-grid"><div><small>最終同期</small><strong>' + escapeHTML(formatDateTime(localSyncMeta().lastSyncedAt)) + '</strong></div><div><small>この端末の変更</small><strong>' + (localSyncMeta().pending ? 'PCへ未送信' : '送信待ちなし') + '</strong></div></div><div class="data-actions"><button class="button button-primary" type="button" data-action="sync-local-server"' + (localSyncRuntime.inFlight ? ' disabled' : '') + '>今すぐ同期</button></div><p class="field-note">オフラインでも、この端末の保存済みレシピを見たり編集したりできます。未送信の変更は再接続時に同期します。同じレシピを同時編集した場合は、更新日時が新しい内容を採用します。</p>' + (localSyncRuntime.error ? '<div class="notice error">' + escapeHTML(localSyncRuntime.error) + '</div>' : '') + '</section>' : '';
+    var pendingSummary = pending ? '<div class="data-preview"><strong>読み込み準備完了</strong><span>レシピ ' + pending.data.recipes.length + '件 · 献立 ' + pending.data.mealPlans.length + '件 · 買い物リスト ' + pending.data.shoppingLists.length + '件</span><div class="form-actions"><button class="button button-primary" type="button" data-action="apply-local-import">' + (localSyncRuntime ? 'この内容を統合する' : 'この内容で置き換える') + '</button><button class="button" type="button" data-action="cancel-local-import">キャンセル</button></div></div>' : '';
+     return '<div class="page-heading"><div><a class="link" href="#/more">← その他</a><p class="eyebrow" style="margin-top:15px">Data management</p><h1>データ管理</h1><p>' + (localSyncRuntime ? 'この端末に保存したデータを、Tailscale経由でPCと同期します。' : '通常の保存先はこの端末です。普段のバックアップ・端末移行はJSONの書き出しと共有を使います。') + '</p></div></div>' + localSyncPanel +
        '<section class="panel form-panel"><div class="section-heading"><div><h2>バックアップ・データ移行</h2><p>レシピ・献立・買い物・調理履歴・設定をまとめて扱います。</p></div><span class="pill">' + activeRecipes + 'レシピ</span></div><div class="data-actions"><button class="button button-primary" type="button" data-action="download-data">JSONを書き出す</button><button class="button" type="button" data-action="share-local-data">バックアップを共有</button><button class="button" type="button" data-action="open-local-file">JSONを読み込む</button></div><input id="local-json-file" class="sr-only" type="file" accept="application/json,.json" data-file-input="local-json"><p class="field-note">スマホでは共有ボタンから、Google Drive・iCloud Drive・Filesなどへ保存できます。共有非対応の環境ではJSONダウンロードに切り替わります。</p>' + pendingSummary + '</section>' +
        '<section class="panel form-panel" style="margin-top:16px"><div class="section-heading"><div><h2>ローカルバックアップ</h2><p>読み込みや復元の前に、端末内の退避データを自動作成します。</p></div><span class="pill">' + escapeHTML(formatDateTime(state.sync.lastLocalBackupAt)) + '</span></div><div class="data-status-grid data-status-local"><div><small>端末内バックアップ</small><strong>' + escapeHTML(formatDateTime(state.sync.lastLocalBackupAt)) + '</strong></div><div><small>端末ID</small><strong>' + escapeHTML(String(state.sync.deviceId).slice(0, 8)) + '…</strong></div></div><div class="data-actions"><button class="button" type="button" data-action="backup-local">バックアップを更新</button><button class="button" type="button" data-action="restore-local-backup">バックアップ一覧</button></div></section>' +
        '<details class="panel advanced-sync" style="margin-top:16px"><summary><span><strong>高度な同期</strong><small>Google Drive API · ' + escapeHTML(driveLabel) + '</small></span><span class="pill">' + escapeHTML(driveLabel) + '</span></summary><div class="advanced-sync-body"><div class="section-heading"><div><h2>Google Drive</h2><p>現在は未設定・Deferredです。必要になった時だけ有効化できます。</p></div></div><div class="data-status-grid"><div><small>最終同期</small><strong>' + escapeHTML(formatDateTime(state.sync.lastSyncAt)) + '</strong></div><div><small>最終Driveバックアップ</small><strong>' + escapeHTML(formatDateTime(state.sync.lastDriveBackupAt)) + '</strong></div><div><small>設定状態</small><strong>' + (configured ? 'Client ID設定済み' : '未設定') + '</strong></div></div><div class="data-actions"><button class="button" type="button" data-action="connect-drive">Google Drive設定</button><button class="button" type="button" data-action="sync-drive">同期（統合して保存）</button><button class="button" type="button" data-action="backup-drive">Driveバックアップ</button><button class="button" type="button" data-action="restore-drive">Driveから復元</button></div><p class="field-note">同期は「Driveから取得 → レコード単位で統合 → 検証 → ローカル保存 → Drive更新」の順で行います。設定や個人的なメモも同期対象にできます。Google未設定のままでも、JSONバックアップ機能は通常どおり利用できます。</p>' + (state.sync.lastError || ui.dataError ? '<div class="notice error data-error">' + escapeHTML(ui.dataError || state.sync.lastError) + '</div>' : '') + '</div></details>' +
-       '<section class="panel form-panel" style="margin-top:16px"><h2>保存範囲と安全性</h2><p class="field-note">JSONには、アプリのデータと設定が含まれます。通常の保存先はこの端末で、Google Drive API同期は任意の高度な機能です。Client Secretやアクセストークンはリポジトリ・localStorageへ保存しません。</p></section>';
+       '<section class="panel form-panel" style="margin-top:16px"><h2>保存範囲と安全性</h2><p class="field-note">JSONには、アプリのデータと設定が含まれます。' + (localSyncRuntime ? 'データはこの端末とPC上の同期データに保存します。PC側では自動バックアップも作成します。' : '通常の保存先はこの端末で、Google Drive API同期は任意の高度な機能です。') + 'Client Secretやアクセストークンはリポジトリ・localStorageへ保存しません。</p></section>';
   }
 
   function renderTags() {
@@ -2021,6 +2246,10 @@
       showToast('JSONを書き出しました。');
       return;
     }
+    if (action === 'sync-local-server') {
+      syncLocalServer();
+      return;
+    }
     if (action === 'open-local-file') {
       var fileInput = document.getElementById('local-json-file');
       if (fileInput) fileInput.click();
@@ -2042,10 +2271,11 @@
     }
     if (action === 'apply-local-import') {
       if (!ui.pendingImport) return;
-      if (!confirm('現在のローカルデータを読み込み内容で置き換えますか？置き換え前のバックアップは自動保存されます。')) return;
+      if (!confirm(localSyncRuntime ? 'バックアップを現在のデータと統合し、PCと同期しますか？同じデータは新しい更新を採用します。統合前のバックアップは自動保存されます。' : '現在のローカルデータを読み込み内容で置き換えますか？置き換え前のバックアップは自動保存されます。')) return;
       if (!saveLocalSnapshot()) return;
-      applyDataSnapshot(ui.pendingImport);
-      showToast('ローカルデータを復元しました。');
+      var importedSnapshot = localSyncRuntime ? mergeSnapshots(buildSyncSnapshot(), ui.pendingImport) : ui.pendingImport;
+      if (!applyDataSnapshot(importedSnapshot)) return;
+      showToast(localSyncRuntime ? 'バックアップを統合しました。PCと同期します。' : 'ローカルデータを復元しました。');
       render();
       return;
     }
@@ -2248,6 +2478,7 @@
       return;
     }
     if (action === 'reset-data') {
+      if (localSyncRuntime) { showToast('PC同期中は初期データへの置き換えを行えません。必要なレシピは一覧から削除してください。'); return; }
       if (!confirm('現在のデータを初期サンプルに置き換えますか？')) return;
        var deviceId = state.sync.deviceId;
        state = normalizeState(createSeedState());
@@ -2758,5 +2989,6 @@
   }
 
   registerServiceWorker();
+  initializeLocalSync();
   render();
 }());

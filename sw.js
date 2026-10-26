@@ -1,9 +1,9 @@
-const CACHE_NAME = 'meal-note-shell-v26';
+const CACHE_NAME = 'meal-note-shell-v28';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=21',
-  './app.js?v=24',
+  './app.js?v=26',
   './manifest.webmanifest',
   './app-config.js',
   './app-icon-192.png',
@@ -27,6 +27,8 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Sync must always reach the PC. Never cache API responses or replace them with HTML.
+  if (new URL(event.request.url).pathname.split('/').includes('api')) return;
   if (event.request.method !== 'GET') return;
   if (new URL(event.request.url).origin !== self.location.origin) return;
   if (new URL(event.request.url).pathname.endsWith('/app-config.js')) {
