@@ -49,6 +49,7 @@ originalText を材料ごとに保持し、数値数量だけを献立人数に�
 - Cooking history with rating and note
 - URL-first recipe import: public Recipe JSON-LD pages can be imported with ingredients, steps, times, and thumbnail; review remains available when needed
 - Gemini-assisted import bridge: copy a structured prompt for a YouTube URL, paste Gemini's JSON response, and import ingredients / steps / metadata without an API key in Meal Note
+- ChatGPT / Gemini recipe JSON and chat save links: open a recipe review from a chat, then explicitly save to the current browser
 - Web App Manifest and application-shell service worker
 - PWA icon uses the supplied `app-icon-192.png` / `app-icon-512.png` assets
 - Data Management: local JSON export/import/share and an automatic local snapshot before restore/sync
@@ -74,6 +75,25 @@ node -e "const http=require('http'),fs=require('fs'),path=require('path');http.c
 Then open http://127.0.0.1:4173/.
 
 No environment variables or database migration commands are required for the MVP. The service worker is enabled on localhost / 127.0.0.1 and HTTPS; it is intentionally not registered when opened via file://.
+
+### Save a recipe from ChatGPT
+
+`skills/save-recipe` contains the reusable 「レシピ保存」 skill. In ChatGPT's Skills screen, upload a ZIP containing that folder, then enable/install it. Codex can also load it from a supported personal skill directory. Availability and installation are separate for ChatGPT workspace skills and local Codex skills.
+
+Ask 「このレシピ保存して」 after discussing a recipe. The skill uses the selected dish and later adjustments in the conversation, then produces a link to `#/recipes/import?recipe=<URL-encoded recipe JSON>`. Opening the link displays a review. Select 「確認して保存」 to register the recipe in the browser that opened the link. Recipe links do not automatically save, and creating a link does not mean registration has completed.
+
+The app preserves structured quantities, original ingredient text, notes, optional ingredients, source conversation URL, and the ChatGPT/Gemini origin. Links accept one recipe with up to 100 ingredients and 100 steps, and a JSON body of up to 20,000 characters. Long links can instead use the existing JSON paste input.
+
+The skill's standard-library Python helper builds links without contacting a server:
+
+~~~text
+python skills/save-recipe/scripts/build_save_link.py recipe.json
+python skills/save-recipe/scripts/build_save_link.py recipe.json --app-url http://127.0.0.1:4173/
+~~~
+
+Use the same device and browser as the usual Meal Note app. Saving from another browser does not synchronize the data automatically. A fully chat-only remote write would require an authenticated API or control of the intended existing browser; this static app has no registration API.
+
+Recipe test data, generated links, skill ZIPs, and screenshots belong under the ignored `data/` or `exports/` directories and must not be included in the public deployment.
 
 ### Google Drive setup (optional / deferred)
 

@@ -1,0 +1,6 @@
+interface:
+  display_name: "レシピ保存"
+  short_description: "会話で気に入ったレシピをMeal Noteの保存リンクに変換する"
+  default_prompt: "$save-recipe この会話のレシピを料理アプリに保存して。"
+policy:
+  allow_implicit_invocation: true

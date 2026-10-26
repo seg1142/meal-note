@@ -18,6 +18,7 @@ service-account*.json
 *.db
 *.sqlite
 *.sqlite3
+__pycache__/
 
 # OS/editor files
 .DS_Store

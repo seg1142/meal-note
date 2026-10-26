@@ -550,7 +550,7 @@
     parsed.tags = Array.isArray(parsed.tags) ? parsed.tags : [];
     parsed.recipes.forEach(function (recipe) {
       normalizeRecord(recipe, migratedAt);
-      if (recipe.sourceType !== 'json_ld' && recipe.sourceUrl) recipe.sourceType = 'web';
+      if (recipe.sourceType !== 'json_ld' && recipe.sourceType !== 'ai_json' && recipe.sourceUrl) recipe.sourceType = 'web';
       recipe.thumbnailUrl = String(recipe.thumbnailUrl || '').trim() || thumbnailUrlForSource(recipe.sourceUrl);
     });
     parsed.mealPlans.forEach(function (meal) { normalizeRecord(meal, migratedAt); });
@@ -627,9 +627,11 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       document.getElementById('storageStatus').textContent = 'ローカル保存済み';
+      return true;
     } catch (error) {
       document.getElementById('storageStatus').textContent = '保存領域を確認';
       showToast('ブラウザの保存領域に書き込めませんでした。');
+      return false;
     }
   }
 
@@ -1151,6 +1153,105 @@
     return routePath().split('/').filter(Boolean);
   }
 
+  function validateRecipeLinkPayload(payload) {
+    function object(value) { return value && typeof value === 'object' && !Array.isArray(value); }
+    function text(value, label, limit, required) {
+      if (value == null && !required) return;
+      if (typeof value !== 'string' || value.length > limit || (required && !value.trim())) throw new Error(label + 'の形式を確認してください。');
+    }
+    function number(value, label, positive) {
+      if (value == null) return;
+      if (typeof value !== 'number' || !Number.isFinite(value) || (positive ? value <= 0 : value < 0)) throw new Error(label + 'は数値で指定してください。');
+    }
+    if (!object(payload)) throw new Error('レシピは1件のJSONオブジェクトで指定してください。');
+    text(payload.title, 'レシピ名', 200, true);
+    text(payload.description, '説明', 10000);
+    text(payload.category, 'カテゴリ', 50);
+    text(payload.generator, '作成元', 50);
+    if (Object.prototype.hasOwnProperty.call(payload, 'url') || Object.prototype.hasOwnProperty.call(payload, 'image')) throw new Error('保存リンクのURLはsourceUrl、画像はthumbnailUrlで指定してください。');
+    ['sourceUrl', 'thumbnailUrl'].forEach(function (key) {
+      text(payload[key], 'URL', 3000);
+      if (payload[key]) {
+        var url;
+        try { url = new URL(payload[key]); } catch (error) { throw new Error('URLの形式を確認してください。'); }
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('URLはhttpsまたはhttpで指定してください。');
+      }
+    });
+    number(payload.servings, '人数', true);
+    number(payload.originalServings, '人数', true);
+    number(payload.prepTimeMinutes, '下準備時間');
+    number(payload.cookTimeMinutes, '調理時間');
+    if (payload.tags != null) {
+      if (!Array.isArray(payload.tags) || payload.tags.length > 30) throw new Error('タグは30件以内の配列で指定してください。');
+      payload.tags.forEach(function (tag) { text(tag, 'タグ', 100, true); });
+    }
+    if (!Array.isArray(payload.ingredients) || !payload.ingredients.length || payload.ingredients.length > 100) throw new Error('材料は1〜100件の配列で指定してください。');
+    payload.ingredients.forEach(function (item) {
+      if (typeof item === 'string') { text(item, '材料', 2000, true); return; }
+      if (!object(item)) throw new Error('材料の形式を確認してください。');
+      text(item.name || item.displayName, '材料名', 200, true);
+      number(item.quantity, '材料の数量');
+      text(item.unit, '材料の単位', 50);
+      text(item.note, '材料の補足', 2000);
+      text(item.originalText, '材料の表記', 2000);
+      if (item.optional != null && typeof item.optional !== 'boolean') throw new Error('材料の任意指定はtrueまたはfalseで指定してください。');
+    });
+    if (!Array.isArray(payload.steps) || !payload.steps.length || payload.steps.length > 100) throw new Error('工程は1〜100件の配列で指定してください。');
+    payload.steps.forEach(function (item) {
+      if (typeof item === 'string') text(item, '工程', 4000, true);
+      else if (object(item)) text(item.instruction || item.text || item.name, '工程', 4000, true);
+      else throw new Error('工程の形式を確認してください。');
+    });
+    return payload;
+  }
+
+  function receiveRecipeLink() {
+    var hash = location.hash;
+    if (routePath() !== '/recipes/import' || hash.indexOf('?') === -1) return;
+    var query = hash.slice(hash.indexOf('?') + 1);
+    if (!/(?:^|&)recipe(?:=|&|$)/.test(query)) return;
+    // Consume the payload before rendering so refreshes and later renders cannot resubmit it.
+    window.history.replaceState(null, '', location.pathname + location.search + '#/recipes/import');
+    ui.importDraft = null;
+    ui.importError = '';
+    ui.urlFallback = null;
+    try {
+      if (query.length > 180000) throw new Error('レシピが長すぎます。JSON貼り付け欄を使ってください。');
+      decodeURIComponent(query.replace(/\+/g, ' '));
+      var values = new URLSearchParams(query).getAll('recipe');
+      if (values.length !== 1 || !values[0]) throw new Error('レシピのデータが空、または重複しています。');
+      if (values[0].length > 20000) throw new Error('レシピは20,000文字以内にしてください。長い場合はJSON貼り付け欄を使ってください。');
+      var payload = validateRecipeLinkPayload(JSON.parse(values[0]));
+      ui.importDraft = structuredRecipeToDraft(payload, '');
+    } catch (error) {
+      var message = error instanceof SyntaxError || error instanceof URIError ? 'レシピのリンクが壊れています。チャットでリンクを作り直すか、JSONを貼り付けてください。' : error.message;
+      ui.importError = message || 'レシピのリンクを読み込めませんでした。';
+    }
+  }
+
+  function aiSourceLabel(recipe) {
+    if (recipe.aiGenerator === 'chatgpt') return 'ChatGPT';
+    if (recipe.aiGenerator === 'gemini') return 'Gemini';
+    return 'AI';
+  }
+
+  function importIngredientLine(item) {
+    return (item.originalText || item.displayName) + (item.note ? '（' + item.note + '）' : '') + (item.optional ? '（任意）' : '');
+  }
+
+  function ingredientsFromReview(text, previous) {
+    var originalText = previous.map(importIngredientLine).join('\n');
+    if (String(text || '').replace(/\r\n?/g, '\n') === originalText.replace(/\r\n?/g, '\n')) return clone(previous);
+    var lines = String(text || '').split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean);
+    var previousLines = previous.map(importIngredientLine);
+    return lines.map(function (line, index) {
+      if (line === previousLines[index]) return clone(previous[index]);
+      var matchingIndex = previousLines.indexOf(line);
+      if (matchingIndex !== -1 && previousLines.lastIndexOf(line) === matchingIndex) return clone(previous[matchingIndex]);
+      return parseIngredientLine(line);
+    }).filter(Boolean);
+  }
+
   function currentTopRoute() {
     var parts = routeParts();
     if (parts[0] === 'recipes') return 'recipes';
@@ -1195,6 +1296,7 @@
   }
 
   function render() {
+    receiveRecipeLink();
     applyTheme();
     updateNavigation();
     var path = routePath();
@@ -1365,7 +1467,7 @@
       '<section class="panel form-panel"><div class="form-grid">' +
       '<div class="field full"><label for="recipe-title">レシピ名</label><input id="recipe-title" name="title" value="' + escapeAttr(draft.title) + '" placeholder="例：週末のトマト煮" required></div>' +
       '<div class="field full"><label for="recipe-description">説明・メモ</label><textarea id="recipe-description" name="description" placeholder="この料理のポイントや家族の好みなど">' + escapeHTML(draft.description || '') + '</textarea></div>' +
-      '<div class="field"><label for="recipe-category">カテゴリ</label><select id="recipe-category" name="category">' + selectOptions(['主菜', '副菜', '主食', '汁物', 'おつまみ'], draft.category || '主菜', false) + '</select></div>' +
+      '<div class="field"><label for="recipe-category">カテゴリ</label><select id="recipe-category" name="category">' + selectOptions(recipeCategories(draft.category), draft.category || '主菜', false) + '</select></div>' +
       '<div class="field"><label for="recipe-tags">タグ</label><input id="recipe-tags" name="tags" value="' + escapeAttr(tagText) + '" placeholder="和食, 時短"></div>' +
       '<div class="field"><label for="recipe-servings">元の人数</label><input id="recipe-servings" name="originalServings" type="number" min="1" step="1" value="' + escapeAttr(draft.originalServings || 2) + '"></div>' +
       '<div class="field"><label for="recipe-source">出典URL（任意）</label><input id="recipe-source" name="sourceUrl" type="url" value="' + escapeAttr(draft.sourceUrl || '') + '" placeholder="https://..."></div>' +
@@ -1401,7 +1503,7 @@
       '<div class="detail-layout"><div><section class="panel detail-hero"><div class="detail-hero-layout">' + detailImage + '<div class="detail-hero-copy"><div class="tag-list"><span class="pill">' + escapeHTML(recipe.category || '未分類') + '</span>' + (recipe.tags || []).map(function (tag) { return '<span class="pill">' + escapeHTML(tag) + '</span>'; }).join('') + '</div><h1>' + escapeHTML(recipe.title) + '</h1><p class="detail-description">' + escapeHTML(recipe.description || 'このレシピにはまだ説明がありません。') + '</p><div class="detail-actions"><button class="button button-primary" type="button" data-action="open-add-meal" data-recipe-id="' + escapeAttr(id) + '">献立に追加</button><a class="button" href="#/recipes/' + escapeAttr(id) + '/cook">調理モードを開始</a>' + (recipe.sourceUrl ? '<a class="button button-quiet" target="_blank" rel="noreferrer" href="' + escapeAttr(recipe.sourceUrl) + '">元ページを開く ↗</a>' : '') + '</div></div></div><div class="detail-stats"><div class="detail-stat"><small>調理時間</small><strong>' + escapeHTML(timeLabel(recipe)) + '</strong></div><div class="detail-stat"><small>元の人数</small><strong>' + escapeHTML(recipe.originalServings + '人前') + '</strong></div><div class="detail-stat"><small>評価</small><strong class="rating">' + (average ? '★ ' + average.toFixed(1) : '☆ —') + '</strong></div><div class="detail-stat"><small>お気に入り</small><strong><button class="favorite-button ' + (recipe.favorite ? 'is-favorite' : '') + '" type="button" data-action="favorite" data-id="' + escapeAttr(id) + '" aria-label="お気に入り">' + (recipe.favorite ? '★' : '☆') + '</button></strong></div></div></section>' +
       '<section class="panel detail-section"><div class="section-heading"><div><h2>材料</h2><p>人数に合わせて数量を計算表示しています。元データは変わりません。</p></div><div class="servings-control"><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="-1" aria-label="人数を減らす">−</button><output>' + escapeHTML(servings) + '人前</output><button type="button" data-action="adjust-servings" data-id="' + escapeAttr(id) + '" data-delta="1" aria-label="人数を増やす">＋</button></div></div><ul class="ingredient-list">' + ingredientRows + '</ul></section>' +
       '<section class="panel detail-section"><div class="section-heading"><h2>作り方</h2></div><ol class="step-list">' + stepRows + '</ol></section></div>' +
-      '<aside class="side-stack"><section class="panel"><div class="section-heading"><div><h3>調理履歴</h3><p>作った記録がここに残ります。</p></div></div><div class="history-stat-grid"><div class="history-stat"><strong>' + history.length + '</strong><small>調理回数</small></div><div class="history-stat"><strong>' + (lastCooked(id) ? formatDate(lastCooked(id)) : '—') + '</strong><small>最終調理</small></div><div class="history-stat"><strong>' + (average ? average.toFixed(1) : '—') + '</strong><small>平均評価</small></div></div>' + (historyRows ? '<div class="history-list" style="margin-top:14px">' + historyRows + '</div>' : '<p class="field-note" style="margin-top:16px">まだ調理履歴はありません。</p>') + '</section><section class="panel"><h3 style="margin:0 0 13px;font-size:14px">レシピ情報</h3><p class="field-note">登録日：' + escapeHTML(formatDate(String(recipe.createdAt).slice(0, 10))) + '</p><p class="field-note">更新日：' + escapeHTML(formatDate(String(recipe.updatedAt).slice(0, 10))) + '</p><p class="field-note">登録方法：' + (recipe.sourceType === 'json_ld' ? 'JSON-LDインポート' : recipe.sourceType === 'ai_json' ? 'Gemini JSONインポート' : recipe.sourceType === 'web' ? 'URL登録' : '手動入力') + '</p></section></aside></div>';
+      '<aside class="side-stack"><section class="panel"><div class="section-heading"><div><h3>調理履歴</h3><p>作った記録がここに残ります。</p></div></div><div class="history-stat-grid"><div class="history-stat"><strong>' + history.length + '</strong><small>調理回数</small></div><div class="history-stat"><strong>' + (lastCooked(id) ? formatDate(lastCooked(id)) : '—') + '</strong><small>最終調理</small></div><div class="history-stat"><strong>' + (average ? average.toFixed(1) : '—') + '</strong><small>平均評価</small></div></div>' + (historyRows ? '<div class="history-list" style="margin-top:14px">' + historyRows + '</div>' : '<p class="field-note" style="margin-top:16px">まだ調理履歴はありません。</p>') + '</section><section class="panel"><h3 style="margin:0 0 13px;font-size:14px">レシピ情報</h3><p class="field-note">登録日：' + escapeHTML(formatDate(String(recipe.createdAt).slice(0, 10))) + '</p><p class="field-note">更新日：' + escapeHTML(formatDate(String(recipe.updatedAt).slice(0, 10))) + '</p><p class="field-note">登録方法：' + (recipe.sourceType === 'json_ld' ? 'JSON-LDインポート' : recipe.sourceType === 'ai_json' ? aiSourceLabel(recipe) + ' JSONインポート' : recipe.sourceType === 'web' ? 'URL登録' : '手動入力') + '</p></section></aside></div>';
   }
 
   function mealsFor(date, slot) {
@@ -1539,17 +1641,17 @@
       ? 'YouTubeからはタイトルとサムネイルを自動取得しました。動画の説明欄に材料がない場合、材料・工程はレシピ詳細から追加できます。'
       : 'このURLから材料・工程を自動取得できませんでした。取得できたタイトル・説明・画像を使って、URLを先に登録できます。';
     var fallbackHtml = fallback ? '<section class="url-fallback"><div>' + fallbackImage + '<div><h2>URL情報で登録</h2><p>' + escapeHTML(fallbackHint) + '</p></div></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt">Gemini用プロンプトをコピー</button><span class="field-note">動画をGeminiで要約した回答を、下の貼り付け欄へ戻して登録できます。</span></div><form class="form-layout" data-form="url-fallback" data-source-url="' + escapeAttr(fallback.sourceUrl) + '" data-thumbnail-url="' + escapeAttr(fallback.thumbnailUrl || '') + '"><div class="field"><label for="fallback-title">タイトル</label><input id="fallback-title" name="title" value="' + escapeAttr(fallback.title || '') + '" placeholder="例：動画のレシピ名" required></div><div class="field"><label for="fallback-description">備考・材料メモ（任意）</label><textarea id="fallback-description" name="description" placeholder="動画の説明欄や、あとで確認したいメモを貼り付けできます。">' + escapeHTML(fallback.description || '') + '</textarea></div><div class="form-actions"><button class="button button-primary" type="submit">このURL情報で登録</button><button class="button button-quiet" type="button" data-action="clear-import">キャンセル</button></div></form></section>' : '';
-    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URLだけでレシピ登録</h1><p>レシピサイトのリンクを貼り付けるだけで、材料・工程・サムネイルを自動入力します。</p></div></div><section class="panel form-panel"><div class="notice">レシピサイトはRecipe JSON-LDが公開されていれば、内容をまとめて取り込めます。YouTubeはGeminiに動画を要約させたJSONを貼り付けると、材料・工程までまとめて登録できます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピサイト／YouTubeのURL</label><input id="import-url" name="url" type="url" inputmode="url" autocomplete="url" value="' + escapeAttr(fallback ? fallback.sourceUrl : '') + '" placeholder="https://..."><span class="field-note">Geminiの回答に元URLが含まれていれば、URL欄を空欄にして回答だけ貼り付けることもできます。</span></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt">Gemini用プロンプトをコピー</button><span class="field-note">YouTube下部のGemini向け。動画を表示した状態でコピーしたプロンプトを貼り付けてください。</span></div><details class="import-advanced"><summary>Geminiの回答／JSON-LD／HTMLを貼り付ける</summary><div class="field"><label for="import-source">Geminiの回答またはJSON-LD／ページHTML</label><textarea id="import-source" name="source" placeholder="Geminiの回答は、指定されたJSONだけを貼り付けてください。```json の囲みも解析できます。"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div></details><div class="form-actions"><button class="button button-primary" type="submit" name="mode" value="auto">URLだけで登録</button><button class="button button-quiet" type="submit" name="mode" value="review">内容を確認して登録</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + fallbackHtml + '</section>';
+    return '<div class="page-heading"><div><a class="link" href="#/recipes">← レシピ一覧</a><p class="eyebrow" style="margin-top:15px">Import</p><h1>URL・チャットからレシピ登録</h1><p>レシピサイトのリンクや、ChatGPT・Geminiの整形JSONから登録できます。</p></div></div><section class="panel form-panel"><div class="notice">レシピサイトはRecipe JSON-LDが公開されていれば、内容をまとめて取り込めます。ChatGPT・Geminiの整形JSONを貼り付けると、材料・工程までまとめて登録できます。チャットで受け取った保存リンクからは、確認画面を直接開けます。</div><form class="form-layout" data-form="import" style="margin-top:17px"><div class="field"><label for="import-url">レシピサイト／YouTubeのURL</label><input id="import-url" name="url" type="url" inputmode="url" autocomplete="url" value="' + escapeAttr(fallback ? fallback.sourceUrl : '') + '" placeholder="https://..."><span class="field-note">回答に元URLが含まれていれば、URL欄を空欄にして回答だけ貼り付けることもできます。</span></div><div class="import-gemini-action"><button class="button button-small" type="button" data-action="copy-gemini-prompt">Gemini用プロンプトをコピー</button><span class="field-note">YouTube下部のGemini向け。動画を表示した状態でコピーしたプロンプトを貼り付けてください。</span></div><details class="import-advanced"><summary>ChatGPT・Geminiの回答／JSON-LD／HTMLを貼り付ける</summary><div class="field"><label for="import-source">ChatGPT・Geminiの回答またはJSON-LD／ページHTML</label><textarea id="import-source" name="source" placeholder="チャットの回答は、レシピのJSONを貼り付けてください。```json の囲みも解析できます。"></textarea><span class="field-note">URLと貼り付けの両方がある場合は、貼り付け内容を優先します。</span></div></details><div class="form-actions"><button class="button button-primary" type="submit" name="mode" value="auto">URLだけで登録</button><button class="button button-quiet" type="submit" name="mode" value="review">内容を確認して登録</button></div></form>' + (ui.importError ? '<div class="notice error" style="margin-top:16px">' + escapeHTML(ui.importError) + '</div>' : '') + fallbackHtml + '</section>';
   }
 
   function renderImportReview() {
     var draft = ui.importDraft;
     var ingredients = draft.ingredients || [];
     var steps = draft.steps || [];
-    var ingredientText = ingredients.map(function (item) { return item.originalText || item.displayName; }).join('\n');
+    var ingredientText = ingredients.map(importIngredientLine).join('\n');
     var stepText = steps.map(function (item) { return item.instruction; }).join('\n');
-    var importLabel = draft.sourceType === 'ai_json' ? 'Gemini整形JSON' : 'Recipe JSON-LD';
-    return '<div class="page-heading"><div><a class="link" href="#/recipes/import">← インポート入力へ戻る</a><p class="eyebrow" style="margin-top:15px">Review before save</p><h1>取り込み内容を確認</h1><p>自動保存はされません。内容を整えてから保存してください。</p></div><div class="heading-actions"><button class="button" type="button" data-action="clear-import">破棄</button></div></div><section class="panel form-panel"><div class="notice">取得元：' + escapeHTML(draft.sourceUrl || '貼り付けデータ') + '<br>' + importLabel + 'として検出しました。</div><form class="form-layout" data-form="import-review" style="margin-top:17px"><div class="import-review"><div class="form-grid"><div class="field full"><label for="review-title">レシピ名</label><input id="review-title" name="title" value="' + escapeAttr(draft.title) + '" required></div><div class="field full"><label for="review-description">説明</label><textarea id="review-description" name="description">' + escapeHTML(draft.description || '') + '</textarea></div><div class="field"><label for="review-category">カテゴリ</label><select id="review-category" name="category">' + selectOptions(['主菜', '副菜', '主食', '汁物', 'おつまみ'], draft.category || '主菜', false) + '</select></div><div class="field"><label for="review-servings">元の人数</label><input id="review-servings" name="originalServings" type="number" min="1" value="' + escapeAttr(draft.originalServings || 2) + '"></div><div class="field"><label for="review-prep">下準備（分）</label><input id="review-prep" name="prepTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.prepTimeMinutes || 0) + '"></div><div class="field"><label for="review-cook">調理（分）</label><input id="review-cook" name="cookTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.cookTimeMinutes || 0) + '"></div><div class="field full"><label for="review-tags">タグ（カンマ区切り）</label><input id="review-tags" name="tags" value="' + escapeAttr((draft.tags || []).join(', ')) + '"></div></div><div class="field"><label for="review-ingredients">材料（1行1材料）</label><textarea id="review-ingredients" name="ingredients" required>' + escapeHTML(ingredientText) + '</textarea><label for="review-steps" style="margin-top:12px">工程（1行1工程）</label><textarea id="review-steps" name="steps" required>' + escapeHTML(stepText) + '</textarea></div></div><div class="form-actions"><button class="button button-primary" type="submit">確認して保存</button></div></form></section>';
+    var importLabel = draft.sourceType === 'ai_json' ? aiSourceLabel(draft) + '整形JSON' : 'Recipe JSON-LD';
+    return '<div class="page-heading"><div><a class="link" href="#/recipes/import">← インポート入力へ戻る</a><p class="eyebrow" style="margin-top:15px">Review before save</p><h1>取り込み内容を確認</h1><p>自動保存はされません。内容を整えてから保存してください。</p></div><div class="heading-actions"><button class="button" type="button" data-action="clear-import">破棄</button></div></div><section class="panel form-panel"><div class="notice">取得元：' + escapeHTML(draft.sourceUrl || '貼り付けデータ') + '<br>' + importLabel + 'として検出しました。</div><form class="form-layout" data-form="import-review" style="margin-top:17px"><div class="import-review"><div class="form-grid"><div class="field full"><label for="review-title">レシピ名</label><input id="review-title" name="title" value="' + escapeAttr(draft.title) + '" required></div><div class="field full"><label for="review-description">説明</label><textarea id="review-description" name="description">' + escapeHTML(draft.description || '') + '</textarea></div><div class="field"><label for="review-category">カテゴリ</label><select id="review-category" name="category">' + selectOptions(recipeCategories(draft.category), draft.category || '主菜', false) + '</select></div><div class="field"><label for="review-servings">元の人数</label><input id="review-servings" name="originalServings" type="number" min="1" value="' + escapeAttr(draft.originalServings || 2) + '"></div><div class="field"><label for="review-prep">下準備（分）</label><input id="review-prep" name="prepTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.prepTimeMinutes || 0) + '"></div><div class="field"><label for="review-cook">調理（分）</label><input id="review-cook" name="cookTimeMinutes" type="number" min="0" value="' + escapeAttr(draft.cookTimeMinutes || 0) + '"></div><div class="field full"><label for="review-tags">タグ（カンマ区切り）</label><input id="review-tags" name="tags" value="' + escapeAttr((draft.tags || []).join(', ')) + '"></div></div><div class="field"><label for="review-ingredients">材料（1行1材料）</label><textarea id="review-ingredients" name="ingredients" required>' + escapeHTML(ingredientText) + '</textarea><label for="review-steps" style="margin-top:12px">工程（1行1工程）</label><textarea id="review-steps" name="steps" required>' + escapeHTML(stepText) + '</textarea></div></div><div class="form-actions"><button class="button button-primary" type="submit">確認して保存</button></div></form></section>';
   }
 
   function cookSessionFor(id, recipe) {
@@ -1780,7 +1882,7 @@
       var unit = row.querySelector('[name^="ingredient-unit-"]').value.trim();
       var note = row.querySelector('[name^="ingredient-note-"]').value.trim();
       var optional = row.querySelector('[name^="ingredient-optional-"]');
-      return { id: row.dataset.id || uid('ri'), ingredientId: name ? ensureIngredientMaster(name, '', unit) : 'custom-', displayName: name, quantity: quantityValue === '' ? null : Number(quantityValue), unit: unit, originalText: quantityValue === '' ? name : formatQuantity(quantityValue) + (unit ? ' ' + unit : '') + ' ' + name, optional: optional ? optional.checked : false, note: note };
+      return { id: row.dataset.id || uid('ri'), ingredientId: name ? ingredientIdFor(name) : 'custom-', displayName: name, quantity: quantityValue === '' ? null : Number(quantityValue), unit: unit, originalText: quantityValue === '' ? name : formatQuantity(quantityValue) + (unit ? ' ' + unit : '') + ' ' + name, optional: optional ? optional.checked : false, note: note };
     }).filter(function (item) { return item.displayName; });
     draft.steps = Array.from(form.querySelectorAll('[data-step-row]')).map(function (row) {
       return { id: row.dataset.id || uid('step'), stepNumber: 0, instruction: row.querySelector('textarea').value.trim(), timerSeconds: null };
@@ -1793,6 +1895,10 @@
     if (!draft.title) { showToast('レシピ名を入力してください。'); return null; }
     if (!draft.ingredients.length && !options.allowIncomplete) { showToast('材料を1つ以上入力してください。'); return null; }
     if (!draft.steps.length && !options.allowIncomplete) { showToast('工程を1つ以上入力してください。'); return null; }
+    var beforeSave = clone(state);
+    draft.ingredients.forEach(function (item) {
+      item.ingredientId = ensureIngredientMaster(item.displayName, '', item.unit);
+    });
     var isNew = !id;
     draft.updatedAt = nowISO();
     draft.deletedAt = null;
@@ -1812,7 +1918,7 @@
         type: 'web',
         url: draft.sourceUrl || '',
         originalTitle: draft.title,
-        importMethod: draft.sourceType === 'ai_json' ? 'gemini_json' : 'json_ld',
+        importMethod: draft.sourceType === 'ai_json' ? (draft.aiGenerator ? draft.aiGenerator + '_json' : 'ai_json') : 'json_ld',
         rawMetadata: draft.rawMetadata || null,
          createdAt: nowISO(),
          updatedAt: nowISO(),
@@ -1822,7 +1928,7 @@
     draft.tags.forEach(function (tag) {
        if (!state.tags.some(function (item) { return !item.deletedAt && item.name === tag; })) state.tags.push({ id: uid('tag'), name: tag, type: 'tag', createdAt: nowISO(), updatedAt: nowISO(), deletedAt: null });
     });
-    saveState();
+    if (!saveState()) { state = beforeSave; return null; }
     delete ui.formDraft[id || 'new'];
     showToast('レシピを保存しました。');
     location.hash = '#/recipes/' + draft.id;
@@ -1840,6 +1946,7 @@
       '以下の形式を厳守してください。',
       '',
       '{',
+      '  "generator": "gemini",',
       '  "sourceUrl": "Geminiが認識した動画URL。不明な場合は null",',
       '  "title": "料理名",',
       '  "description": "料理の簡単な説明",',
@@ -2309,6 +2416,7 @@
       return;
     }
     if (form.dataset.form === 'import-review') {
+      if (!ui.importDraft) return;
       var reviewData = new FormData(form);
       var imported = clone(ui.importDraft);
       imported.title = String(reviewData.get('title') || '').trim();
@@ -2318,11 +2426,10 @@
       imported.prepTimeMinutes = Math.max(0, Number(reviewData.get('prepTimeMinutes') || 0));
       imported.cookTimeMinutes = Math.max(0, Number(reviewData.get('cookTimeMinutes') || 0));
       imported.tags = String(reviewData.get('tags') || '').split(',').map(function (tag) { return tag.trim(); }).filter(Boolean);
-      imported.ingredients = parseIngredientLines(String(reviewData.get('ingredients') || ''));
+      imported.ingredients = ingredientsFromReview(String(reviewData.get('ingredients') || ''), imported.ingredients);
       imported.steps = String(reviewData.get('steps') || '').split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean).map(function (instruction) { return { id: uid('step'), instruction: instruction, stepNumber: 0, timerSeconds: null }; });
       imported.steps.forEach(function (item, index) { item.stepNumber = index + 1; });
-      saveRecipeDraft(imported, null);
-      ui.importDraft = null;
+      if (saveRecipeDraft(imported, null)) ui.importDraft = null;
       return;
     }
   });
@@ -2359,7 +2466,7 @@
       }
     }
     if (!name || /^(適量|少々|お好みで)$/.test(name)) { name = original; quantity = null; unit = ''; }
-    return { id: uid('ri'), ingredientId: ensureIngredientMaster(name, '', unit), displayName: name, quantity: quantity, unit: unit, originalText: original, optional: false, note: '' };
+    return { id: uid('ri'), ingredientId: ingredientIdFor(name), displayName: name, quantity: quantity, unit: unit, originalText: original, optional: false, note: '' };
   }
 
   function parseIngredientLines(text) {
@@ -2477,9 +2584,14 @@
   }
 
   function categoryValue(value) {
-    var allowed = ['主菜', '副菜', '主食', '汁物', 'おつまみ'];
     var text = String(value || '').trim();
-    return allowed.indexOf(text) !== -1 ? text : '主菜';
+    return text || '主菜';
+  }
+
+  function recipeCategories(current) {
+    var categories = ['主菜', '副菜', '主食', '汁物', 'おつまみ', 'その他', 'デザート'];
+    if (current && categories.indexOf(current) === -1) categories.push(current);
+    return categories;
   }
 
   function servingsFromValue(value) {
@@ -2500,8 +2612,8 @@
       var rawQuantity = item.quantity == null ? '' : String(item.quantity).trim();
       var quantity = rawQuantity === '' ? null : parseNumber(rawQuantity);
       var unit = String(item.unit || '').trim();
-      var originalText = String(item.originalText || '').trim() || (rawQuantity ? rawQuantity + (unit ? ' ' + unit : '') + ' ' + name : name);
-      return { id: uid('ri'), ingredientId: ensureIngredientMaster(name, '', unit), displayName: name, quantity: quantity, unit: unit, originalText: originalText, optional: Boolean(item.optional), note: String(item.note || '').trim() };
+      var originalText = String(item.originalText || '').trim() || ((rawQuantity ? rawQuantity + (unit ? ' ' + unit : '') : unit) + ' ' + name).trim();
+      return { id: uid('ri'), ingredientId: ingredientIdFor(name), displayName: name, quantity: quantity, unit: unit, originalText: originalText, optional: Boolean(item.optional), note: String(item.note || '').trim() };
     }).filter(Boolean);
     var steps = stepValues.map(function (item) {
       if (typeof item === 'string') return item.trim();
@@ -2518,6 +2630,7 @@
       prepTimeMinutes: minutesFromValue(payload.prepTimeMinutes != null ? payload.prepTimeMinutes : payload.prepTime),
       cookTimeMinutes: minutesFromValue(payload.cookTimeMinutes != null ? payload.cookTimeMinutes : payload.cookTime),
       sourceType: 'ai_json',
+      aiGenerator: /^(chatgpt|gemini)$/i.test(String(payload.generator || payload.aiGenerator || '')) ? String(payload.generator || payload.aiGenerator).toLowerCase() : '',
       sourceUrl: source,
       thumbnailUrl: firstRecipeImage(payload.thumbnailUrl || payload.image, source || location.href) || thumbnailUrlForSource(source),
       favorite: false,
@@ -2623,14 +2736,14 @@
     if (!importedDraft) {
       if (url) await prepareUrlFallback(url, 'Recipe形式のJSON-LDを検出できませんでした。取得できたURL情報だけで登録できます。', pageMetadata);
       else {
-        ui.importError = 'レシピJSONまたはGeminiの整形JSONを検出できませんでした。内容を確認して再度お試しください。';
+        ui.importError = 'レシピJSONまたはAIの整形JSONを検出できませんでした。内容を確認して再度お試しください。';
         render();
       }
       return;
     }
     if (mode === 'auto' && importedDraft.title && importedDraft.ingredients.length && importedDraft.steps.length) {
-      ui.importDraft = null;
-      saveRecipeDraft(importedDraft, null);
+      if (saveRecipeDraft(importedDraft, null)) ui.importDraft = null;
+      else { ui.importDraft = importedDraft; render(); }
       return;
     }
     ui.importDraft = importedDraft;
